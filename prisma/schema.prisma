@@ -1,0 +1,134 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// NextAuth.js Models for OAuth Authentication
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String?
+  email         String?      @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  repositories  Repository[]
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid())
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Repository Analytics Domain Models
+model Repository {
+  id             String        @id @default(cuid())
+  githubId       BigInt        @unique // GitHub's internal repository ID
+  name           String
+  owner          String
+  fullName       String
+  htmlUrl        String
+  isTracked      Boolean       @default(false)
+  webhookEnabled Boolean       @default(false) // Tracks if webhooks are set up
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  commits        Commit[]
+  pullRequests   PullRequest[]
+}
+
+model Contributor {
+  id           String        @id @default(cuid())
+  githubId     BigInt?       @unique // GitHub User ID
+  login        String        @unique // GitHub User login/username
+  name         String?
+  email        String?
+  avatarUrl    String?
+  
+  commits      Commit[]
+  pullRequests PullRequest[]
+}
+
+model Commit {
+  id             String       @id @default(cuid())
+  sha            String       @unique // Commit hash
+  message        String
+  url            String
+  committedAt    DateTime
+  
+  repositoryId   String
+  repository     Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  
+  contributorId  String?
+  contributor    Contributor? @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  authorName     String
+  authorEmail    String
+  authorAvatar   String?
+
+  @@index([repositoryId])
+  @@index([committedAt])
+}
+
+model PullRequest {
+  id             String       @id @default(cuid())
+  githubId       BigInt       @unique // GitHub Pull Request node ID
+  number         Int          // PR number in repository
+  title          String
+  state          String       // open, closed, merged
+  url            String
+  createdAt      DateTime
+  updatedAt      DateTime
+  closedAt       DateTime?
+  mergedAt       DateTime?
+  merged         Boolean      @default(false)
+  
+  repositoryId   String
+  repository     Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  
+  contributorId  String?
+  contributor    Contributor? @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  authorName     String
+  authorEmail    String
+  authorAvatar   String?
+
+  @@index([repositoryId])
+  @@index([createdAt])
+}
