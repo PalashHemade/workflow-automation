@@ -73,18 +73,22 @@ model Repository {
   
   commits        Commit[]
   pullRequests   PullRequest[]
+  branches       Branch[]
+  webhookEvents  WebhookEvent[]
 }
 
 model Contributor {
-  id           String        @id @default(cuid())
-  githubId     BigInt?       @unique // GitHub User ID
-  login        String        @unique // GitHub User login/username
-  name         String?
-  email        String?
-  avatarUrl    String?
+  id             String        @id @default(cuid())
+  githubId       BigInt?       @unique // GitHub User ID
+  login          String        @unique // GitHub User login/username
+  name           String?
+  email          String?
+  avatarUrl      String?
   
-  commits      Commit[]
-  pullRequests PullRequest[]
+  commits        Commit[]
+  pullRequests   PullRequest[]
+  reviews        Review[]
+  reviewComments ReviewComment[]
 }
 
 model Commit {
@@ -102,6 +106,8 @@ model Commit {
   authorName     String
   authorEmail    String
   authorAvatar   String?
+
+  files          CommitFile[]
 
   @@index([repositoryId])
   @@index([committedAt])
@@ -129,6 +135,103 @@ model PullRequest {
   authorEmail    String
   authorAvatar   String?
 
+  files          PullRequestFile[]
+  reviews        Review[]
+  comments       ReviewComment[]
+
   @@index([repositoryId])
   @@index([createdAt])
+}
+
+model CommitFile {
+  id             String   @id @default(cuid())
+  commitId       String
+  commit         Commit   @relation(fields: [commitId], references: [id], onDelete: Cascade)
+  filename       String
+  status         String   // added, modified, removed, renamed
+  additions      Int
+  deletions      Int
+  changes        Int
+  patch          String?  @db.Text // Unified diff/patch
+
+  @@index([commitId])
+}
+
+model PullRequestFile {
+  id             String      @id @default(cuid())
+  pullRequestId  String
+  pullRequest    PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  filename       String
+  status         String
+  additions      Int
+  deletions      Int
+  changes        Int
+  patch          String?     @db.Text
+
+  @@index([pullRequestId])
+}
+
+model Review {
+  id             String         @id @default(cuid())
+  githubId       BigInt         @unique
+  pullRequestId  String
+  pullRequest    PullRequest    @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  contributorId  String?
+  contributor    Contributor?   @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  authorName     String
+  authorAvatar   String?
+  body           String?        @db.Text
+  state          String         // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, etc.
+  submittedAt    DateTime
+  comments       ReviewComment[]
+
+  @@index([pullRequestId])
+}
+
+model ReviewComment {
+  id             String       @id @default(cuid())
+  githubId       BigInt       @unique
+  pullRequestId  String
+  pullRequest    PullRequest  @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  reviewId       String?
+  review         Review?      @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  contributorId  String?
+  contributor    Contributor? @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  authorName     String
+  authorAvatar   String?
+  path           String
+  line           Int?
+  body           String       @db.Text
+  diffHunk       String?      @db.Text
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@index([pullRequestId])
+  @@index([reviewId])
+}
+
+model Branch {
+  id             String     @id @default(cuid())
+  name           String
+  sha            String
+  isDefault      Boolean    @default(false)
+  isProtected    Boolean    @default(false)
+  repositoryId   String
+  repository     Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, name])
+  @@index([repositoryId])
+}
+
+model WebhookEvent {
+  id             String      @id @default(cuid())
+  repositoryId   String?
+  repository     Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  eventType      String      // push, pull_request, create, delete, pull_request_review, pull_request_review_comment
+  action         String?     // opened, closed, synchronization, submitted, created, etc.
+  payload        String      @db.Text
+  processedAt    DateTime    @default(now())
+
+  @@index([repositoryId])
+  @@index([processedAt])
 }

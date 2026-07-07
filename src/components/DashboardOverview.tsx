@@ -3,7 +3,11 @@
 import React, { useState, useEffect } from "react";
 import RepoOnboarding from "./RepoOnboarding";
 import MetricCharts from "./MetricCharts";
-import { ShieldCheck, GitBranch, LogOut, Loader2 } from "lucide-react";
+import CommitList from "./CommitList";
+import PullRequestList from "./PullRequestList";
+import BranchList from "./BranchList";
+import WebhookEventLog from "./WebhookEventLog";
+import { ShieldCheck, GitBranch, LogOut, Loader2, BarChart2, GitCommit, GitPullRequest, Terminal, HelpCircle } from "lucide-react";
 import { signOut } from "next-auth/react";
 
 export default function DashboardOverview() {
@@ -14,6 +18,9 @@ export default function DashboardOverview() {
   const [loadingRepos, setLoadingRepos] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
+  
+  // Navigation tabs: overview | commits | pulls | branches | webhooks
+  const [activeTab, setActiveTab] = useState<"overview" | "commits" | "pulls" | "branches" | "webhooks">("overview");
 
   // Fetch repositories list on mount
   useEffect(() => {
@@ -87,11 +94,11 @@ export default function DashboardOverview() {
       setSelectedRepoId(newRepo.id);
       setSyncingRepoId(newRepo.id);
 
-      // 2. Trigger the sync engine background process
+      // 2. Trigger the sync engine background process (Phase 2 sync depth is full by default)
       const syncResponse = await fetch("/api/repos/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repositoryId: newRepo.id, maxPages }),
+        body: JSON.stringify({ repositoryId: newRepo.id, maxPages, syncDepth: "full" }),
       });
 
       if (!syncResponse.ok) {
@@ -115,10 +122,12 @@ export default function DashboardOverview() {
     }
   };
 
+  const selectedRepo = dbRepos.find((r) => r.id === selectedRepoId);
+
   return (
     <div className="min-h-screen bg-[#020617] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-[#020617] text-white">
       {/* Navbar Header */}
-      <nav className="border-b border-slate-800 bg-slate-950/60 backdrop-blur-md sticky top-0 z-55">
+      <nav className="border-b border-slate-800 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -126,7 +135,7 @@ export default function DashboardOverview() {
                 <GitBranch className="h-5 w-5 text-white" />
               </div>
               <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-200 via-white to-violet-200 bg-clip-text text-transparent">
-                GitInsight <span className="text-xs font-semibold text-indigo-400 border border-indigo-500/20 bg-indigo-950/30 px-1.5 py-0.5 rounded ml-1.5">v1.0</span>
+                GitInsight <span className="text-xs font-semibold text-indigo-400 border border-indigo-500/20 bg-indigo-950/30 px-1.5 py-0.5 rounded ml-1.5">v1.1</span>
               </span>
             </div>
 
@@ -165,30 +174,102 @@ export default function DashboardOverview() {
               dbRepos={dbRepos}
               githubRepos={githubRepos}
               selectedRepoId={selectedRepoId}
-              onSelectRepo={setSelectedRepoId}
+              onSelectRepo={(id) => {
+                setSelectedRepoId(id);
+                setActiveTab("overview"); // Reset to overview on switch
+              }}
               onTrackRepo={handleTrackRepo}
               syncingRepoId={syncingRepoId}
             />
           )}
         </section>
 
-        {/* Section 2: Metrics Dashboard */}
-        <section className="space-y-3 border-t border-slate-900 pt-8">
-          <div className="flex flex-col">
-            <h1 className="text-xl font-bold tracking-tight">Real-Time Analytics</h1>
-            <p className="text-xs text-slate-400">Aggregated insights derived from commits, cycles and webhook pipelines</p>
+        {/* Section 2: Metrics Dashboard with Tab System */}
+        <section className="space-y-4 border-t border-slate-900 pt-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col">
+              <h1 className="text-xl font-bold tracking-tight">Real-Time Analytics Workspace</h1>
+              <p className="text-xs text-slate-400">Explore parsed file diffs, pull request timelines, reviews, and event stream pipelines.</p>
+            </div>
+
+            {/* Premium Tab Bar */}
+            {selectedRepoId && (
+              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-850 p-1 rounded-xl w-max self-start sm:self-auto">
+                <button
+                  onClick={() => setActiveTab("overview")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "overview" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  Overview
+                </button>
+                <button
+                  onClick={() => setActiveTab("commits")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "commits" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <GitCommit className="h-3.5 w-3.5" />
+                  Commits
+                </button>
+                <button
+                  onClick={() => setActiveTab("pulls")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "pulls" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <GitPullRequest className="h-3.5 w-3.5" />
+                  Pull Requests
+                </button>
+                <button
+                  onClick={() => setActiveTab("branches")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "branches" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <GitBranch className="h-3.5 w-3.5" />
+                  Branches
+                </button>
+                <button
+                  onClick={() => setActiveTab("webhooks")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "webhooks" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <Terminal className="h-3.5 w-3.5" />
+                  Events
+                </button>
+              </div>
+            )}
           </div>
 
-          {selectedRepoId && metricsData ? (
-            <MetricCharts
-              data={metricsData}
-              loading={loadingMetrics}
-              onRefresh={handleRefreshMetrics}
-            />
+          {selectedRepoId ? (
+            <div className="pt-2 animate-in fade-in duration-350">
+              {activeTab === "overview" && metricsData && (
+                <MetricCharts
+                  data={metricsData}
+                  loading={loadingMetrics}
+                  onRefresh={handleRefreshMetrics}
+                  repositoryId={selectedRepoId}
+                />
+              )}
+
+              {activeTab === "commits" && (
+                <CommitList repositoryId={selectedRepoId} />
+              )}
+
+              {activeTab === "pulls" && (
+                <PullRequestList repositoryId={selectedRepoId} />
+              )}
+
+              {activeTab === "branches" && (
+                <BranchList repositoryId={selectedRepoId} />
+              )}
+
+              {activeTab === "webhooks" && (
+                <WebhookEventLog repositoryId={selectedRepoId} />
+              )}
+            </div>
           ) : (
             <div className="flex h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/10 text-center text-slate-500">
               <GitBranch className="h-10 w-10 text-slate-700 mb-2 animate-bounce" />
-              <h3 className="font-semibold text-white">No Analytics Selected</h3>
+              <h3 className="font-semibold text-white">No Analytics Workspace Selected</h3>
               <p className="text-xs max-w-xs mt-1">Select a tracked repository from the sidebar, or onboard a new repository above to view commits frequencies and contributor distributions.</p>
             </div>
           )}
