@@ -15,7 +15,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark h-full">
-      <body className="h-full bg-slate-950 font-sans antialiased text-slate-200">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          try {
+            if (localStorage.theme === 'light') {
+              document.documentElement.classList.remove('dark');
+            } else {
+              document.documentElement.classList.add('dark');
+            }
+          } catch (_) {}
+        ` }} />
+      </head>
+      <body className="h-full bg-slate-50 dark:bg-slate-950 font-sans antialiased text-slate-900 dark:text-slate-200 transition-colors duration-300">
         <Providers>{children}</Providers>
       </body>
     </html>

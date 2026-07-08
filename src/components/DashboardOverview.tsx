@@ -12,6 +12,7 @@ import { signOut } from "next-auth/react";
 import RepoSettings from "./RepoSettings";
 import SyncHistory from "./SyncHistory";
 import RepoTimeline from "./RepoTimeline";
+import ThemeToggle from "./ThemeToggle";
 
 export default function DashboardOverview() {
   const [dbRepos, setDbRepos] = useState<any[]>([]);
@@ -154,28 +155,29 @@ export default function DashboardOverview() {
   const selectedRepo = dbRepos.find((r) => r.id === selectedRepoId);
 
   return (
-    <div className="min-h-screen bg-[#020617] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-[#020617] text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] dark:bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] dark:from-slate-900 dark:via-[#020617] dark:to-[#020617] text-slate-900 dark:text-white transition-colors duration-300">
       {/* Navbar Header */}
-      <nav className="border-b border-slate-800 bg-slate-950/60 backdrop-blur-md sticky top-0 z-50">
+      <nav className="border-b border-slate-200 dark:border-slate-850 bg-white/70 dark:bg-slate-950/60 backdrop-blur-md sticky top-0 z-50 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500">
                 <GitBranch className="h-5 w-5 text-white" />
               </div>
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-200 via-white to-violet-200 bg-clip-text text-transparent">
-                GitInsight <span className="text-xs font-semibold text-indigo-400 border border-indigo-500/20 bg-indigo-950/30 px-1.5 py-0.5 rounded ml-1.5">v1.1</span>
+              <span className="font-bold text-lg tracking-tight text-slate-900 dark:text-white">
+                GitInsight <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-950/30 px-1.5 py-0.5 rounded ml-1.5">v1.1</span>
               </span>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <ShieldCheck className="h-4 w-4 text-indigo-450" />
+              <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <ShieldCheck className="h-4 w-4 text-indigo-500" />
                 <span>OAuth Secured</span>
               </div>
+              <ThemeToggle />
               <button
                 onClick={() => signOut()}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition bg-slate-900 border border-slate-800 hover:bg-slate-850 px-3 py-1.5 rounded-lg"
+                className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 px-3 py-1.5 rounded-lg shadow-sm transition-colors duration-300"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Sign Out
