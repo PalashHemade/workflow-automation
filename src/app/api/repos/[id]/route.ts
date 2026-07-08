@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth";
 import { fetchGitHub } from "@/lib/github";
 
 export const dynamic = "force-dynamic";
@@ -65,18 +65,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json();
     const { displayName, isArchived, isTracked, pollingInterval } = body;
 
-    const repository = await db.repository.findUnique({
-      where: { id: repositoryId },
-      include: { webhook: true, user: { include: { accounts: true } } },
-    });
+    const repository = await checkRepositoryAccess(repositoryId, session.user.id);
 
     if (!repository) {
-      return NextResponse.json({ error: "Repository not found" }, { status: 404 });
+      return NextResponse.json({ error: "Forbidden or Repository not found" }, { status: 403 });
     }
 
-    if (repository.userId !== session.user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const githubAccount = repository.user.accounts.find((acc) => acc.provider === "github");
     const accessToken = githubAccount?.access_token || "";
@@ -139,18 +133,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
     const repositoryId = params.id;
 
-    const repository = await db.repository.findUnique({
-      where: { id: repositoryId },
-      include: { webhook: true, user: { include: { accounts: true } } },
-    });
+    const repository = await checkRepositoryAccess(repositoryId, session.user.id);
 
     if (!repository) {
-      return NextResponse.json({ error: "Repository not found" }, { status: 404 });
+      return NextResponse.json({ error: "Forbidden or Repository not found" }, { status: 403 });
     }
 
-    if (repository.userId !== session.user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const githubAccount = repository.user.accounts.find((acc) => acc.provider === "github");
     const accessToken = githubAccount?.access_token || "";

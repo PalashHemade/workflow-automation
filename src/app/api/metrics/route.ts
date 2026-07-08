@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,18 +19,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing repositoryId" }, { status: 400 });
     }
 
-    // 1. Verify repository exists and user is owner
-    const repository = await db.repository.findUnique({
-      where: { id: repositoryId },
-    });
+    // 1. Verify repository exists and user has access
+    const repository = await checkRepositoryAccess(repositoryId, session.user.id);
 
     if (!repository) {
-      return NextResponse.json({ error: "Repository not found" }, { status: 404 });
+      return NextResponse.json({ error: "Forbidden or Repository not found" }, { status: 403 });
     }
 
-    if (repository.userId !== session.user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     // 2. Calculate general statistics
     const totalCommits = await db.commit.count({

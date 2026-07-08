@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, getUserGithubLogin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +16,16 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = session.user.id;
+    const githubLogin = await getUserGithubLogin(userId);
 
-    // Fetch repositories already registered in our DB
+    // Fetch repositories already registered in our DB that this user tracked or owns on GitHub
     const dbRepos = await db.repository.findMany({
-      where: { userId },
+      where: {
+        OR: [
+          { userId },
+          ...(githubLogin ? [{ owner: githubLogin }] : []),
+        ],
+      },
       include: { webhook: true },
       orderBy: { name: "asc" },
     });
@@ -40,6 +46,7 @@ export async function GET(req: NextRequest) {
               Authorization: `Bearer ${userAccount.access_token}`,
               "User-Agent": "github-analytics-dashboard",
             },
+            cache: "no-store",
           }
         );
         if (ghResponse.ok) {
@@ -111,6 +118,7 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${userAccount.access_token}`,
         "User-Agent": "github-analytics-dashboard",
       },
+      cache: "no-store",
     });
 
     if (!repoResponse.ok) {
@@ -130,23 +138,43 @@ export async function POST(req: NextRequest) {
     });
 
     if (existingRepo) {
-      // If it exists but is owned by someone else in the DB, we can link it or error.
-      // Since repositories are linked to Users, we check if it is already tracked by this user.
-      if (existingRepo.userId === userId) {
+      // If it exists but is registered by someone else in the DB, re-assign the userId to current user
+      if (existingRepo.userId !== userId) {
+        const updatedRepo = await db.repository.update({
+          where: { id: existingRepo.id },
+          data: { userId },
+          include: { webhook: true },
+        });
+
         return NextResponse.json({
-          message: "Repository already registered for tracking.",
+          success: true,
+          message: "Repository ownership updated and registered for tracking.",
           repository: {
-            ...existingRepo,
-            githubId: existingRepo.githubId.toString(),
-            webhook: existingRepo.webhook
+            ...updatedRepo,
+            githubId: updatedRepo.githubId.toString(),
+            webhook: updatedRepo.webhook
               ? {
-                  ...existingRepo.webhook,
-                  githubWebhookId: existingRepo.webhook.githubWebhookId?.toString() || null,
+                  ...updatedRepo.webhook,
+                  githubWebhookId: updatedRepo.webhook.githubWebhookId?.toString() || null,
                 }
               : null,
           },
         });
       }
+
+      return NextResponse.json({
+        message: "Repository already registered for tracking.",
+        repository: {
+          ...existingRepo,
+          githubId: existingRepo.githubId.toString(),
+          webhook: existingRepo.webhook
+            ? {
+                ...existingRepo.webhook,
+                githubWebhookId: existingRepo.webhook.githubWebhookId?.toString() || null,
+              }
+            : null,
+        },
+      });
     }
 
     // Create the repository entry in the database along with its webhook record
@@ -190,3 +218,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
   }
 }
+

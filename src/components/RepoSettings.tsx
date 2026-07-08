@@ -30,12 +30,14 @@ interface RepoSettingsProps {
   repositoryId: string;
   onRefreshRepos: () => void;
   onSelectTab: (tab: "overview" | "commits" | "pulls" | "branches" | "webhooks" | "settings") => void;
+  onDeleteRepo?: (repoId: string) => void;
 }
 
 export default function RepoSettings({
   repositoryId,
   onRefreshRepos,
   onSelectTab,
+  onDeleteRepo,
 }: RepoSettingsProps) {
   const [repo, setRepo] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -250,7 +252,11 @@ export default function RepoSettings({
       });
       if (res.ok) {
         setShowDeleteModal(false);
-        onRefreshRepos();
+        if (onDeleteRepo) {
+          onDeleteRepo(repositoryId);
+        } else {
+          onRefreshRepos();
+        }
       } else {
         const err = await res.json();
         setDeleteError(err.error || "Failed to delete repository.");

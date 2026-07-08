@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth";
 import { EventType, EventImportance } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -26,16 +26,10 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Verify repository ownership
-    const repository = await db.repository.findUnique({
-      where: { id: repositoryId },
-    });
+    const repository = await checkRepositoryAccess(repositoryId, session.user.id);
 
     if (!repository) {
-      return NextResponse.json({ error: "Repository not found" }, { status: 404 });
-    }
-
-    if (repository.userId !== session.user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ error: "Forbidden or Repository not found" }, { status: 403 });
     }
 
     // 3. Parse query parameters

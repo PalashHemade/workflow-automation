@@ -87,6 +87,20 @@ export default function DashboardOverview() {
     }
   };
 
+  const handleDeleteRepoCallback = (deletedId: string) => {
+    fetchRepos();
+    setDbRepos((prev) => {
+      const remaining = prev.filter((r) => r.id !== deletedId);
+      if (remaining.length > 0) {
+        setSelectedRepoId(remaining[0].id);
+      } else {
+        setSelectedRepoId(null);
+      }
+      return remaining;
+    });
+    setActiveTab("overview");
+  };
+
   const handleTrackRepo = async (owner: string, name: string, maxPages: number = 3) => {
     try {
       // 1. Register the repository in the database
@@ -314,6 +328,7 @@ export default function DashboardOverview() {
                   repositoryId={selectedRepoId}
                   onRefreshRepos={fetchRepos}
                   onSelectTab={(tab) => setActiveTab(tab)}
+                  onDeleteRepo={handleDeleteRepoCallback}
                 />
               )}
 
