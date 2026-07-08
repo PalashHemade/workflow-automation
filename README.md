@@ -13,6 +13,7 @@ A production-ready full-stack workspace built on **Next.js App Router**, **Prism
 5. **Canonical Project Event Timeline:** Structures all activities (commits, PRs, review submissions, inline diff comments, branch creation/deletions, sync events) into an immutable, audit-ready `ProjectEvent` stream.
 6. **Interactive Analytics Workspace:** Visualizes daily commits frequencies, contributor leaderboards, PR merge cycle durations, and custom analytics.
 7. **Background Sync Logs & Log Pruner:** Keeps records of all background sync processes and automatically prunes log histories older than 30 days.
+8. **Premium Theme Switching:** Seamlessly toggles between a sleek dark mode (retaining vibrant gradient glows) and a clean light mode via a responsive header switch.
 
 ---
 
