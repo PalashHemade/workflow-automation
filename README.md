@@ -1,16 +1,18 @@
 # GitInsight - Real-Time GitHub Repository Analytics Dashboard
 
-A production-ready full-stack template built on **Next.js App Router**, **Prisma ORM**, **Tailwind CSS**, and **Recharts** to audit and track repository statistics in real-time.
+A production-ready full-stack workspace built on **Next.js App Router**, **Prisma ORM**, **Tailwind CSS**, and **Recharts** to audit and track repository statistics, commit history, pull request cycles, and inline reviews in real-time.
 
 ---
 
 ## Key Features
 
 1. **OAuth Authentication & Token Storage:** Integrates NextAuth.js to log in via GitHub, requests the `repo` scope, and securely caches the user's `access_token` in the database.
-2. **Historical Sync Engine:** On demand, triggers a background fetch to download the last 100 commits and PRs using the GitHub REST API and populates database records.
-3. **Cryptographic Webhook Receiver:** Securely receives updates from GitHub using signature validation (`X-Hub-Signature-256`) and timing-safe checks.
-4. **Third-Party Repo Support (Fallback Polling):** If a user doesn't own a repository, webhooks cannot be registered automatically. The app marks `webhookEnabled = false` and syncs statistics using an API polling mechanism.
-5. **Interactive Recharts Dashboard:** Visualizes daily commits frequencies (last 30 days), contributor leaderboard, and PR merge cycle durations.
+2. **Historical Sync Engine:** On demand, triggers an asynchronous background sync to ingest historical commits and PR cycles using the GitHub REST API and populates database records with retry capabilities.
+3. **Cryptographic Webhook Receiver:** Securely receives real-time updates from GitHub (pushes, pull requests, reviews, and comments) using SHA-256 signature validation (`X-Hub-Signature-256`) and timing-safe checks.
+4. **Third-Party Repo Support (Fallback Polling):** If the user doesn't own a repository, the system configures automated background polling sync as a fallback.
+5. **Canonical Project Event Timeline:** Structures all activities (commits, PRs, review submissions, inline diff comments, branch creation/deletions, sync events) into an immutable, audit-ready `ProjectEvent` stream.
+6. **Interactive Analytics Workspace:** Visualizes daily commits frequencies, contributor leaderboards, PR merge cycle durations, and custom analytics.
+7. **Background Sync Logs & Log Pruner:** Keeps records of all background sync processes and automatically prunes log histories older than 30 days.
 
 ---
 
@@ -29,6 +31,10 @@ To avoid duplicate entries when concurrent historical syncs and webhook events i
 * **PullRequest:** A unique index on `githubId` prevents duplicate records of pull requests. A composite key index is also maintained for tracking repo numbers.
 * **Contributor:** A unique index on `login` (username) prevents duplicate author records. The sync engine dynamically fetches or registers contributor logins, and links them to commits/PRs.
 
+### 3. Timeline Event Stream
+* Activities are normalized into a unified `ProjectEvent` table containing generic fields (`title`, `description`, `actorName`, `importance`, `source`) alongside event-specific payloads in a JSON metadata field.
+* Events are cross-linked via `parentEventId` (e.g., matching a review submission or commit back to its parent pull request opened event), allowing the building of relational graphs for development activity.
+
 ---
 
 ## Directory Layout
@@ -36,10 +42,11 @@ To avoid duplicate entries when concurrent historical syncs and webhook events i
 ```
 github-tracker/
 ├── prisma/
-│   └── schema.prisma          # Prisma schema models
+│   ├── schema.prisma          # Prisma schema models (NextAuth + Git Analytics)
+│   └── migrations/            # SQL migration history files
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx         # Main html layout with NextAuth context
+│   │   ├── layout.tsx         # Main HTML layout with NextAuth context
 │   │   ├── page.tsx           # Dashboard view or Landing page
 │   │   ├── api/
 │   │   │   ├── auth/[...nextauth]/
@@ -50,18 +57,32 @@ github-tracker/
 │   │   │   │       └── route.ts # Historical REST API sync & Webhook creator
 │   │   │   ├── metrics/
 │   │   │   │   └── route.ts   # Stats aggregator API
+│   │   │   ├── timeline/
+│   │   │   │   └── route.ts   # Filtered, paginated event stream API
+│   │   │   ├── cron/
+│   │   │   │   └── sync/
+│   │   │   │       └── route.ts # Cron endpoint to run background syncs
 │   │   │   └── webhooks/
 │   │   │       └── github/
 │   │   │           └── route.ts # Webhook signature verifier & events handler
 │   ├── components/
-│   │   ├── MetricCharts.tsx   # Dashboard widgets (Recharts)
-│   │   ├── RepoOnboarding.tsx # Onboarding selections
-│   │   ├── DashboardOverview.tsx # State orchestrator
-│   │   ├── Providers.tsx      # NextAuth Context Wrapper
-│   │   └── LoginButton.tsx    # Interactive OAuth button
+│   │   ├── DashboardOverview.tsx # State orchestrator & tab navigations
+│   │   ├── MetricCharts.tsx      # Dashboard widgets (Recharts)
+│   │   ├── RepoTimeline.tsx      # Paginated event pipeline timeline list
+│   │   ├── CommitList.tsx        # Tracked commits list
+│   │   ├── PullRequestList.tsx   # Tracked PR cycles, files, and diff details
+│   │   ├── BranchList.tsx        # Default and active git branches list
+│   │   ├── WebhookEventLog.tsx   # Webhook payloads delivery logs
+│   │   ├── SyncHistory.tsx       # Historical sync run reports
+│   │   ├── RepoSettings.tsx      # Tracking controls and webhook options
 │   ├── lib/
 │   │   ├── db.ts              # PrismaClient global cache
-│   │   └── utils.ts           # Utility functions (cn merge helper)
+│   │   ├── github.ts          # Octokit-style REST fetch helpers with retry logs
+│   │   ├── syncEngine.ts      # Core incremental pull synchronization engine
+│   │   ├── scheduler.ts       # Stateless background polling sync scheduler
+│   │   ├── cleaner.ts         # Periodic log pruner
+│   │   ├── eventHelper.ts     # Helpers to create project event timeline nodes
+│   │   └── utils.ts           # Class merging utilities (Tailwind merges)
 ├── .env.example               # Secrets template configuration
 ├── tailwind.config.js
 ├── tsconfig.json
