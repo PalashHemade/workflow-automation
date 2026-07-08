@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
 
-    const githubAccount = repository.user.accounts.find((acc) => acc.provider === "github");
+    const githubAccount = repository.user.accounts.find((acc: any) => acc.provider === "github");
     const accessToken = githubAccount?.access_token || "";
 
     const updateData: any = {};
@@ -109,9 +109,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         githubId: updatedRepo.githubId.toString(),
         webhook: updatedRepo.webhook
           ? {
-              ...updatedRepo.webhook,
-              githubWebhookId: updatedRepo.webhook.githubWebhookId?.toString() || null,
-            }
+            ...updatedRepo.webhook,
+            githubWebhookId: updatedRepo.webhook.githubWebhookId?.toString() || null,
+          }
           : null,
       },
     });
@@ -140,9 +140,60 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
 
-    const githubAccount = repository.user.accounts.find((acc) => acc.provider === "github");
+    const githubAccount = repository.user.accounts.find((acc: any) => acc.provider === "github");
     const accessToken = githubAccount?.access_token || "";
 
+    const currentUserId = session.user.id;
+    const trackers = repository.trackingUserIds
+      ? repository.trackingUserIds.split(",").filter((id: string) => id.trim() !== "")
+      : [];
+
+    const isPrimaryOwner = repository.userId === currentUserId;
+    const isObserver = trackers.includes(currentUserId);
+
+    if (isPrimaryOwner) {
+      if (trackers.length > 0) {
+        // Transfer primary ownership to the first observer
+        const nextOwnerId = trackers[0];
+        const remainingTrackers = trackers.slice(1);
+        const newTrackersString = remainingTrackers.length > 0
+          ? `,${remainingTrackers.join(",")},`
+          : "";
+
+        await db.repository.update({
+          where: { id: repositoryId },
+          data: {
+            userId: nextOwnerId,
+            trackingUserIds: newTrackersString,
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: "Repository untracked from your workspace. Active tracking transferred to other members.",
+        });
+      }
+    } else if (isObserver) {
+      // Just remove the user from the trackers list
+      const remainingTrackers = trackers.filter((id: string) => id !== currentUserId);
+      const newTrackersString = remainingTrackers.length > 0
+        ? `,${remainingTrackers.join(",")},`
+        : "";
+
+      await db.repository.update({
+        where: { id: repositoryId },
+        data: {
+          trackingUserIds: newTrackersString,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Repository untracked from your workspace.",
+      });
+    }
+
+    // Default: No other trackers remain, delete completely
     // 1. Automatically delete remote webhook if it exists on GitHub
     if (repository.webhook?.githubWebhookId && repository.webhook.isActive) {
       await deleteGitHubWebhook(
@@ -154,7 +205,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       );
     }
 
-    // 2. Cascade delete repository record (Prisma will automatically cascade delete commits, PRs, etc.)
+    // 2. Cascade delete repository record
     await db.repository.delete({
       where: { id: repositoryId },
     });

@@ -70,6 +70,8 @@ model Repository {
   
   userId         String
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackingUserIds String       @default("")
+
   
   // Metadata for Incremental Sync
   displayName             String?

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +19,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Verify ownership
-    const repo = await db.repository.findUnique({
-      where: { id: repositoryId },
-    });
-    if (!repo || repo.userId !== session.user.id) {
+    const repo = await checkRepositoryAccess(repositoryId, session.user.id);
+    if (!repo) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

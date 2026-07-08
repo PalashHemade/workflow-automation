@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
       where: {
         OR: [
           { userId },
+          { trackingUserIds: { contains: `,${userId},` } },
           ...(githubLogin ? [{ owner: githubLogin }] : []),
         ],
       },
@@ -138,39 +139,46 @@ export async function POST(req: NextRequest) {
     });
 
     if (existingRepo) {
-      // If it exists but is registered by someone else in the DB, re-assign the userId to current user
-      if (existingRepo.userId !== userId) {
-        const updatedRepo = await db.repository.update({
-          where: { id: existingRepo.id },
-          data: { userId },
-          include: { webhook: true },
-        });
-
+      const isTracker = existingRepo.userId === userId || existingRepo.trackingUserIds.includes(`,${userId},`);
+      
+      if (isTracker) {
         return NextResponse.json({
-          success: true,
-          message: "Repository ownership updated and registered for tracking.",
+          message: "Repository already registered for tracking.",
           repository: {
-            ...updatedRepo,
-            githubId: updatedRepo.githubId.toString(),
-            webhook: updatedRepo.webhook
+            ...existingRepo,
+            githubId: existingRepo.githubId.toString(),
+            webhook: existingRepo.webhook
               ? {
-                  ...updatedRepo.webhook,
-                  githubWebhookId: updatedRepo.webhook.githubWebhookId?.toString() || null,
+                  ...existingRepo.webhook,
+                  githubWebhookId: existingRepo.webhook.githubWebhookId?.toString() || null,
                 }
               : null,
           },
         });
       }
 
+      // If not already in trackers list, append current user ID to trackingUserIds
+      const currentTrackers = existingRepo.trackingUserIds || "";
+      const newTrackers = currentTrackers ? `${currentTrackers}${userId},` : `,${userId},`;
+
+      const updatedRepo = await db.repository.update({
+        where: { id: existingRepo.id },
+        data: {
+          trackingUserIds: newTrackers,
+        },
+        include: { webhook: true },
+      });
+
       return NextResponse.json({
-        message: "Repository already registered for tracking.",
+        success: true,
+        message: "Repository registered and tracked successfully.",
         repository: {
-          ...existingRepo,
-          githubId: existingRepo.githubId.toString(),
-          webhook: existingRepo.webhook
+          ...updatedRepo,
+          githubId: updatedRepo.githubId.toString(),
+          webhook: updatedRepo.webhook
             ? {
-                ...existingRepo.webhook,
-                githubWebhookId: existingRepo.webhook.githubWebhookId?.toString() || null,
+                ...updatedRepo.webhook,
+                githubWebhookId: updatedRepo.webhook.githubWebhookId?.toString() || null,
               }
             : null,
         },

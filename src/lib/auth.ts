@@ -109,8 +109,8 @@ export async function checkRepositoryAccess(
 
   if (!repo) return null;
 
-  // 1. Direct ownership in database
-  if (repo.userId === userId) return repo;
+  // 1. Direct ownership or tracking in database
+  if (repo.userId === userId || repo.trackingUserIds.includes(`,${userId},`)) return repo;
 
   // 2. Check if user is the owner of the repo on GitHub
   const githubLogin = await getUserGithubLogin(userId);
