@@ -136,8 +136,14 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json({
-      repositoryName: repository.fullName,
+      repositoryName: repository.displayName || repository.name,
+      fullName: repository.fullName,
       webhookEnabled: repository.webhookEnabled,
+      isArchived: repository.isArchived,
+      syncStatus: repository.syncStatus,
+      lastSyncedAt: repository.lastSuccessfulSyncAt || repository.lastSyncedAt,
+      lastSyncError: repository.lastSyncError,
+      pollingInterval: repository.pollingInterval,
       totalCommits,
       totalPrs,
       openPrsCount,

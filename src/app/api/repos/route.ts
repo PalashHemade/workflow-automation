@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     // Fetch repositories already registered in our DB
     const dbRepos = await db.repository.findMany({
       where: { userId },
+      include: { webhook: true },
       orderBy: { name: "asc" },
     });
 
@@ -52,6 +53,12 @@ export async function GET(req: NextRequest) {
     const serializedDbRepos = dbRepos.map((repo) => ({
       ...repo,
       githubId: repo.githubId.toString(),
+      webhook: repo.webhook
+        ? {
+            ...repo.webhook,
+            githubWebhookId: repo.webhook.githubWebhookId?.toString() || null,
+          }
+        : null,
     }));
 
     return NextResponse.json({
@@ -119,6 +126,7 @@ export async function POST(req: NextRequest) {
     // Check if repository already exists in DB
     const existingRepo = await db.repository.findUnique({
       where: { githubId: BigInt(repoData.id) },
+      include: { webhook: true },
     });
 
     if (existingRepo) {
@@ -130,12 +138,18 @@ export async function POST(req: NextRequest) {
           repository: {
             ...existingRepo,
             githubId: existingRepo.githubId.toString(),
+            webhook: existingRepo.webhook
+              ? {
+                  ...existingRepo.webhook,
+                  githubWebhookId: existingRepo.webhook.githubWebhookId?.toString() || null,
+                }
+              : null,
           },
         });
       }
     }
 
-    // Create the repository entry in the database
+    // Create the repository entry in the database along with its webhook record
     const newRepo = await db.repository.create({
       data: {
         githubId: BigInt(repoData.id),
@@ -144,8 +158,16 @@ export async function POST(req: NextRequest) {
         fullName: repoData.full_name,
         htmlUrl: repoData.html_url,
         isTracked: false,
-        webhookEnabled: false,
         userId,
+        webhook: {
+          create: {
+            status: "inactive",
+            isActive: false,
+          },
+        },
+      },
+      include: {
+        webhook: true,
       },
     });
 
@@ -155,6 +177,12 @@ export async function POST(req: NextRequest) {
       repository: {
         ...newRepo,
         githubId: newRepo.githubId.toString(),
+        webhook: newRepo.webhook
+          ? {
+              ...newRepo.webhook,
+              githubWebhookId: newRepo.webhook.githubWebhookId?.toString() || null,
+            }
+          : null,
       },
     });
   } catch (error: any) {

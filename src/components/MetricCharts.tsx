@@ -28,6 +28,8 @@ import {
   TrendingUp,
   Plus,
   Minus,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 
 interface CommitFrequency {
@@ -43,7 +45,13 @@ interface TopContributor {
 
 interface MetricsData {
   repositoryName: string;
+  fullName: string;
   webhookEnabled: boolean;
+  isArchived: boolean;
+  syncStatus: string;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+  pollingInterval: number;
   totalCommits: number;
   totalPrs: number;
   openPrsCount: number;
@@ -146,31 +154,60 @@ export default function MetricCharts({ data, loading, onRefresh, repositoryId }:
   return (
     <div className="space-y-6">
       {/* Repository Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">{data.repositoryName}</h2>
-          <p className="text-sm text-slate-400">Real-time repository insights & analytics</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Status Badge */}
-          <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium">
-            {data.webhookEnabled ? (
-              <>
-                <Wifi className="h-4 w-4 text-emerald-500 animate-pulse" />
-                <span className="text-emerald-400">Webhooks Active (Real-Time)</span>
-              </>
-            ) : (
-              <>
-                <Activity className="h-4 w-4 text-amber-500" />
-                <span className="text-amber-400">Polling Sync (Near Real-Time)</span>
-              </>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-2xl font-bold tracking-tight text-white">{data.repositoryName}</h2>
+            {data.isArchived && (
+              <span className="inline-flex items-center rounded-full bg-slate-950 border border-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
+                Archived
+              </span>
+            )}
+            {data.syncStatus === "syncing" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-950 border border-indigo-700/40 px-2.5 py-0.5 text-xs font-semibold text-indigo-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Syncing...
+              </span>
+            )}
+            {data.syncStatus === "failed" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-955/20 border border-rose-900/40 px-2.5 py-0.5 text-xs font-semibold text-rose-450" title={data.lastSyncError || ""}>
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
+                Sync Failed
+              </span>
             )}
           </div>
+          <p className="text-xs text-slate-500 font-mono mt-0.5">{data.fullName}</p>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Status Badge */}
+          <div className="flex flex-col text-right">
+            <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium w-max ml-auto">
+              {data.webhookEnabled ? (
+                <>
+                  <Wifi className="h-4 w-4 text-emerald-500 animate-pulse" />
+                  <span className="text-emerald-400">Webhook Sync (Real-Time)</span>
+                </>
+              ) : (
+                <>
+                  <Activity className="h-4 w-4 text-amber-500" />
+                  <span className="text-amber-400">Polling Sync (every {data.pollingInterval}m)</span>
+                </>
+              )}
+            </div>
+            {data.lastSyncedAt && (
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                Last synced: {new Date(data.lastSyncedAt).toLocaleString()}
+              </span>
+            )}
+          </div>
+
           <button
             onClick={handleFullRefresh}
-            className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-slate-700 transition"
+            disabled={data.syncStatus === "syncing"}
+            className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-3.5 py-1.5 text-sm font-medium text-white transition"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${data.syncStatus === "syncing" ? "animate-spin" : ""}`} />
             Refresh
           </button>
         </div>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
+import { createProjectEvent, findPREventId } from "@/lib/eventHelper";
+import { EventType, EventImportance, EventSource } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -209,12 +211,29 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    // 4.1 Log webhook delivery ProjectEvent
+    await createProjectEvent({
+      repositoryId: repository.id,
+      eventType: EventType.WEBHOOK_RECEIVED,
+      entityType: "WebhookEvent",
+      entityId: payload.hook_id?.toString() || `wh-${Date.now()}-${Math.random()}`,
+      actorName: payload.sender?.login || "GitHub",
+      title: `Webhook Received: ${eventType}`,
+      description: `Action: ${action || "None"}`,
+      importance: EventImportance.LOW,
+      source: EventSource.WEBHOOK,
+      metadata: {
+        eventType,
+        action,
+      },
+    });
+
     const { owner, name } = repository;
 
     // 5. Handle Branch creation/deletion (create / delete events)
     if (eventType === "create" && payload.ref_type === "branch") {
       const branchName = payload.ref;
-      const sha = payload.master_branch || ""; // ref creator ref
+      const sha = payload.master_branch || "";
       await db.branch.upsert({
         where: {
           repositoryId_name: {
@@ -231,6 +250,23 @@ export async function POST(req: NextRequest) {
           isProtected: false,
         }
       });
+
+      // Event: Branch Created
+      await createProjectEvent({
+        repositoryId: repository.id,
+        eventType: EventType.BRANCH_CREATED,
+        entityType: "Branch",
+        entityId: `${repository.id}-${branchName}`,
+        actorName: payload.sender?.login || "System",
+        title: `Branch Created: ${branchName}`,
+        importance: EventImportance.LOW,
+        source: EventSource.WEBHOOK,
+        metadata: {
+          branchName,
+          sha,
+        },
+      });
+
       return NextResponse.json({ success: true, event: "create", branch: branchName });
     }
 
@@ -242,12 +278,31 @@ export async function POST(req: NextRequest) {
           name: branchName,
         }
       });
+
+      // Event: Branch Deleted
+      await createProjectEvent({
+        repositoryId: repository.id,
+        eventType: EventType.BRANCH_DELETED,
+        entityType: "Branch",
+        entityId: `${repository.id}-${branchName}-${Date.now()}`,
+        actorName: payload.sender?.login || "System",
+        title: `Branch Deleted: ${branchName}`,
+        importance: EventImportance.LOW,
+        source: EventSource.WEBHOOK,
+        metadata: {
+          branchName,
+        },
+      });
+
       return NextResponse.json({ success: true, event: "delete", branch: branchName });
     }
 
     // 6. Handle PUSH Events
     if (eventType === "push") {
+      const pushRef = payload.ref || "";
+      const branchName = pushRef.replace("refs/heads/", "");
       const commits = payload.commits || [];
+
       for (const commitPayload of commits) {
         const sha = commitPayload.id;
         const authorUsername = commitPayload.author?.username;
@@ -286,11 +341,31 @@ export async function POST(req: NextRequest) {
         if (accessToken) {
           await syncWebhookCommitFiles(owner, name, sha, dbCommit.id, accessToken);
         }
+
+        // Event: Commit Created
+        await createProjectEvent({
+          repositoryId: repository.id,
+          eventType: EventType.COMMIT_CREATED,
+          entityType: "Commit",
+          entityId: dbCommit.id,
+          actorName: authorName || authorUsername || "unknown",
+          title: `Commit Pushed: ${commitPayload.message.split("\n")[0]}`,
+          description: commitPayload.message,
+          importance: EventImportance.LOW,
+          source: EventSource.WEBHOOK,
+          createdAt: new Date(commitPayload.timestamp),
+          metadata: {
+            sha,
+            message: commitPayload.message,
+            branch: branchName,
+            filesChanged: 0,
+            insertions: 0,
+            deletions: 0,
+          },
+        });
       }
 
       // Update default branch if push ref matches it
-      const pushRef = payload.ref || "";
-      const branchName = pushRef.replace("refs/heads/", "");
       if (branchName) {
         await db.branch.upsert({
           where: {
@@ -307,6 +382,17 @@ export async function POST(req: NextRequest) {
           }
         });
       }
+
+      // Log webhook sync log record
+      await db.backgroundSyncLog.create({
+        data: {
+          repositoryId: repository.id,
+          syncType: "webhook",
+          status: "completed",
+          commitsProcessed: commits.length,
+          prsProcessed: 0,
+        }
+      });
 
       return NextResponse.json({ success: true, event: "push", processed: commits.length });
     }
@@ -379,6 +465,104 @@ export async function POST(req: NextRequest) {
         await syncWebhookPRFiles(owner, name, prNumber, dbPR.id, accessToken);
       }
 
+      // Log webhook sync log record
+      await db.backgroundSyncLog.create({
+        data: {
+          repositoryId: repository.id,
+          syncType: "webhook",
+          status: "completed",
+          commitsProcessed: 0,
+          prsProcessed: 1,
+        }
+      });
+
+      // Event: PR Opened
+      const prOpenedEvent = await createProjectEvent({
+        repositoryId: repository.id,
+        eventType: EventType.PR_OPENED,
+        entityType: "PullRequest",
+        entityId: dbPR.id,
+        actorName: senderLogin || "unknown",
+        title: `PR Opened: #${prNumber} ${title}`,
+        description: title,
+        importance: EventImportance.NORMAL,
+        source: EventSource.WEBHOOK,
+        createdAt,
+        metadata: {
+          prNumber,
+          title,
+          state: "open",
+          commitsCount: prPayload.commits || 0,
+          filesChanged: prPayload.changed_files || 0,
+          reviewsCount: 0,
+          mergeDurationMinutes: null,
+        },
+      });
+
+      // Event: PR Closed / Merged
+      if (action === "closed") {
+        if (merged) {
+          const mergeDurationMinutes = Math.round((mergedAt!.getTime() - createdAt.getTime()) / (1000 * 60));
+          await createProjectEvent({
+            repositoryId: repository.id,
+            eventType: EventType.PR_MERGED,
+            entityType: "PullRequest",
+            entityId: dbPR.id,
+            parentEventId: prOpenedEvent?.id,
+            actorName: senderLogin || "unknown",
+            title: `PR Merged: #${prNumber} ${title}`,
+            description: title,
+            importance: EventImportance.HIGH,
+            source: EventSource.WEBHOOK,
+            createdAt: mergedAt || new Date(),
+            metadata: {
+              prNumber,
+              title,
+              state: "merged",
+              mergeDurationMinutes,
+            },
+          });
+        } else {
+          await createProjectEvent({
+            repositoryId: repository.id,
+            eventType: EventType.PR_CLOSED,
+            entityType: "PullRequest",
+            entityId: dbPR.id,
+            parentEventId: prOpenedEvent?.id,
+            actorName: senderLogin || "unknown",
+            title: `PR Closed: #${prNumber} ${title}`,
+            description: title,
+            importance: EventImportance.NORMAL,
+            source: EventSource.WEBHOOK,
+            createdAt: closedAt || new Date(),
+            metadata: {
+              prNumber,
+              title,
+              state: "closed",
+            },
+          });
+        }
+      } else if (action === "synchronize" || action === "edited") {
+        await createProjectEvent({
+          repositoryId: repository.id,
+          eventType: EventType.PR_UPDATED,
+          entityType: "PullRequest",
+          entityId: dbPR.id,
+          parentEventId: prOpenedEvent?.id,
+          actorName: senderLogin || "unknown",
+          title: `PR Updated: #${prNumber} ${title}`,
+          description: title,
+          importance: EventImportance.LOW,
+          source: EventSource.WEBHOOK,
+          createdAt: updatedAt,
+          metadata: {
+            prNumber,
+            title,
+            state: "open",
+          },
+        });
+      }
+
       return NextResponse.json({ success: true, event: "pull_request", action, prNumber });
     }
 
@@ -407,7 +591,7 @@ export async function POST(req: NextRequest) {
         contributorId = contributor.id;
       }
 
-      await db.review.upsert({
+      const dbReview = await db.review.upsert({
         where: { githubId: reviewGithubId },
         update: {
           state: reviewPayload.state || "COMMENTED",
@@ -427,6 +611,43 @@ export async function POST(req: NextRequest) {
           authorAvatar: senderAvatar || null,
           contributorId,
         }
+      });
+
+      // Event: Review Submitted / Approved / Changes Requested
+      const prParentEventId = await findPREventId(repository.id, dbPR.id);
+      let reviewType: EventType = EventType.REVIEW_SUBMITTED;
+      let importance: EventImportance = EventImportance.LOW;
+      let reviewTitle = `PR Review Submitted by ${senderLogin}`;
+
+      if (reviewPayload.state === "approved") {
+        reviewType = EventType.REVIEW_APPROVED;
+        importance = EventImportance.NORMAL;
+        reviewTitle = `PR Approved by ${senderLogin}`;
+      } else if (reviewPayload.state === "changes_requested") {
+        reviewType = EventType.CHANGES_REQUESTED;
+        importance = EventImportance.HIGH;
+        reviewTitle = `PR Changes Requested by ${senderLogin}`;
+      }
+
+      await createProjectEvent({
+        repositoryId: repository.id,
+        eventType: reviewType,
+        entityType: "Review",
+        entityId: dbReview.id,
+        parentEventId: prParentEventId,
+        actorName: senderLogin || "unknown",
+        title: reviewTitle,
+        description: reviewPayload.body || null,
+        importance,
+        source: EventSource.WEBHOOK,
+        createdAt: reviewPayload.submitted_at ? new Date(reviewPayload.submitted_at) : new Date(),
+        metadata: {
+          reviewer: senderLogin,
+          reviewState: reviewPayload.state || "COMMENTED",
+          commentsCount: 0,
+          prTitle: dbPR.title,
+          prNumber: dbPR.number,
+        },
       });
 
       return NextResponse.json({ success: true, event: "pull_request_review", action });
@@ -460,7 +681,7 @@ export async function POST(req: NextRequest) {
         contributorId = contributor.id;
       }
 
-      await db.reviewComment.upsert({
+      const dbComment = await db.reviewComment.upsert({
         where: { githubId: commentGithubId },
         update: {
           reviewId: dbReview?.id || null,
@@ -487,6 +708,39 @@ export async function POST(req: NextRequest) {
           authorAvatar: senderAvatar || null,
           contributorId,
         }
+      });
+
+      // Event: Review Comment Created
+      const prParentEventId = await findPREventId(repository.id, dbPR.id);
+      const commentReviewId = dbReview?.id || null;
+      
+      const commentParentId = commentReviewId
+        ? await db.projectEvent.findFirst({
+            where: { repositoryId: repository.id, entityId: commentReviewId, eventType: { in: [EventType.REVIEW_SUBMITTED, EventType.REVIEW_APPROVED, EventType.CHANGES_REQUESTED] } },
+            select: { id: true },
+          }).then((e) => e?.id) || prParentEventId
+        : prParentEventId;
+
+      await createProjectEvent({
+        repositoryId: repository.id,
+        eventType: EventType.REVIEW_COMMENT,
+        entityType: "ReviewComment",
+        entityId: dbComment.id,
+        parentEventId: commentParentId,
+        actorName: senderLogin || "unknown",
+        title: `New PR Comment by ${senderLogin}`,
+        description: commentPayload.body,
+        importance: EventImportance.LOW,
+        source: EventSource.WEBHOOK,
+        createdAt: new Date(commentPayload.created_at),
+        metadata: {
+          reviewer: senderLogin,
+          body: commentPayload.body,
+          path: commentPayload.path,
+          line: commentPayload.line || commentPayload.original_line || null,
+          prTitle: dbPR.title,
+          prNumber: dbPR.number,
+        },
       });
 
       return NextResponse.json({ success: true, event: "pull_request_review_comment", action });

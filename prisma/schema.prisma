@@ -71,10 +71,27 @@ model Repository {
   userId         String
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  // Metadata for Incremental Sync
+  displayName             String?
+  isArchived              Boolean        @default(false)
+  lastSyncedAt            DateTime?
+  lastSuccessfulSyncAt    DateTime?
+  lastFailedSyncAt        DateTime?
+  lastSuccessfulCommitSha String?
+  lastProcessedPullRequest Int?
+  syncStatus              String         @default("idle") // idle, syncing, success, failed
+  lastSyncError           String?        @db.Text
+  syncFailureCount        Int            @default(0)
+  nextAllowedSyncAt       DateTime?
+  pollingInterval         Int            @default(60) // in minutes
+  
   commits        Commit[]
   pullRequests   PullRequest[]
   branches       Branch[]
   webhookEvents  WebhookEvent[]
+  webhook        RepositoryWebhook?
+  syncLogs       BackgroundSyncLog[]
+  projectEvents  ProjectEvent[]
 }
 
 model Contributor {
@@ -234,4 +251,107 @@ model WebhookEvent {
 
   @@index([repositoryId])
   @@index([processedAt])
+}
+
+model RepositoryWebhook {
+  id                     String     @id @default(cuid())
+  repositoryId           String     @unique
+  repository             Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  githubWebhookId        BigInt?    // Webhook ID returned by GitHub to allow automated deletion
+  status                 String     @default("active") // active, inactive, failed
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  lastSuccessfulDelivery DateTime?
+  lastDeliveryAttempt    DateTime?
+  isActive               Boolean    @default(true)
+}
+
+model BackgroundSyncLog {
+  id                String      @id @default(cuid())
+  repositoryId      String?
+  repository        Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  startedAt         DateTime    @default(now())
+  completedAt       DateTime?
+  syncType          String      // manual, webhook, scheduled
+  status            String      // pending, running, completed, failed
+  commitsProcessed  Int         @default(0)
+  prsProcessed      Int         @default(0)
+  durationMs        Int         @default(0)
+  errorMsg          String?     @db.Text
+
+  @@index([repositoryId])
+  @@index([startedAt])
+}
+
+model BackgroundSyncStatus {
+  id          String   @id @default("singleton")
+  lastRunAt   DateTime @default(now())
+  status      String   @default("healthy") // healthy, degraded, failing
+  errorMsg    String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum EventType {
+  COMMIT_CREATED
+  PR_OPENED
+  PR_UPDATED
+  PR_CLOSED
+  PR_MERGED
+  REVIEW_SUBMITTED
+  REVIEW_APPROVED
+  CHANGES_REQUESTED
+  REVIEW_COMMENT
+  BRANCH_CREATED
+  BRANCH_DELETED
+  REPOSITORY_SYNCED
+  SYNC_FAILED
+  WEBHOOK_RECEIVED
+}
+
+enum EventImportance {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum EventSource {
+  WEBHOOK
+  SYNC
+  MANUAL
+  SYSTEM
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ProjectEvent {
+  id               String            @id @default(cuid())
+  repositoryId     String
+  repository       Repository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  eventType        EventType
+  entityType       String            // e.g. Commit, PullRequest, Review, etc.
+  entityId         String?           // ID of the entity in the DB
+  parentEventId    String?           // Reference to parent ProjectEvent.id
+  actorId          String?           // contributorId or userId
+  actorName        String
+  title            String            @db.Text
+  description      String?           @db.Text
+  importance       EventImportance
+  source           EventSource
+  version          Int               @default(1)
+  processingStatus ProcessingStatus  @default(PENDING)
+  processedAt      DateTime?
+  metadata         Json              // Flexible schema-less details
+  createdAt        DateTime          @default(now())
+
+  @@index([repositoryId])
+  @@index([createdAt])
+  @@index([eventType])
+  @@index([actorName])
 }

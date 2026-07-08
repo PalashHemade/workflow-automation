@@ -27,6 +27,9 @@ interface DBRepo {
   htmlUrl: string;
   isTracked: boolean;
   webhookEnabled: boolean;
+  displayName?: string | null;
+  isArchived?: boolean;
+  syncStatus?: string;
 }
 
 interface GitHubRepo {
@@ -227,13 +230,14 @@ export default function RepoOnboarding({
           <div className="flex-1 space-y-2 overflow-y-auto max-h-[360px] pr-2">
             {dbRepos.map((repo) => {
               const isSelected = repo.id === selectedRepoId;
-              const isSyncing = syncingRepoId === repo.id;
+              const isSyncing = syncingRepoId === repo.id || repo.syncStatus === "syncing";
+              const isFailed = repo.syncStatus === "failed";
+              const isArchived = repo.isArchived;
 
               return (
                 <button
                   key={repo.id}
                   onClick={() => onSelectRepo(repo.id)}
-                  disabled={isSyncing}
                   className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-left transition ${
                     isSelected
                       ? "border-indigo-500 bg-indigo-950/20 text-indigo-200"
@@ -241,17 +245,29 @@ export default function RepoOnboarding({
                   }`}
                 >
                   <div className="min-w-0 pr-2">
-                    <p className="font-semibold truncate text-sm text-white">{repo.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-semibold truncate text-sm text-white">
+                        {repo.displayName || repo.name}
+                      </p>
+                      {isArchived && (
+                        <span className="shrink-0 text-[9px] uppercase tracking-wider bg-slate-800 border border-slate-750 text-slate-400 px-1 rounded">
+                          Archived
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500 truncate">{repo.owner}</p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {isSyncing && <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />}
-                    {!isSyncing && repo.isTracked && (
+                    {isSyncing && <Loader2 className="h-4 w-4 animate-spin text-indigo-455" />}
+                    {!isSyncing && isFailed && (
+                      <span className="inline-block h-2 w-2 rounded-full bg-rose-500" title="Last sync failed" />
+                    )}
+                    {!isSyncing && !isFailed && repo.isTracked && !isArchived && (
                       <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                     )}
-                    {!isSyncing && !repo.isTracked && (
-                      <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    {!isSyncing && !isFailed && (!repo.isTracked || isArchived) && (
+                      <span className="inline-block h-2 w-2 rounded-full bg-slate-500" />
                     )}
                   </div>
                 </button>

@@ -7,8 +7,11 @@ import CommitList from "./CommitList";
 import PullRequestList from "./PullRequestList";
 import BranchList from "./BranchList";
 import WebhookEventLog from "./WebhookEventLog";
-import { ShieldCheck, GitBranch, LogOut, Loader2, BarChart2, GitCommit, GitPullRequest, Terminal, HelpCircle } from "lucide-react";
+import { ShieldCheck, GitBranch, LogOut, Loader2, BarChart2, GitCommit, GitPullRequest, Terminal, HelpCircle, Settings, History, Clock } from "lucide-react";
 import { signOut } from "next-auth/react";
+import RepoSettings from "./RepoSettings";
+import SyncHistory from "./SyncHistory";
+import RepoTimeline from "./RepoTimeline";
 
 export default function DashboardOverview() {
   const [dbRepos, setDbRepos] = useState<any[]>([]);
@@ -19,13 +22,25 @@ export default function DashboardOverview() {
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [syncingRepoId, setSyncingRepoId] = useState<string | null>(null);
   
-  // Navigation tabs: overview | commits | pulls | branches | webhooks
-  const [activeTab, setActiveTab] = useState<"overview" | "commits" | "pulls" | "branches" | "webhooks">("overview");
+  // Navigation tabs: overview | commits | pulls | branches | webhooks | settings | history | timeline
+  const [activeTab, setActiveTab] = useState<"overview" | "commits" | "pulls" | "branches" | "webhooks" | "settings" | "history" | "timeline">("overview");
 
   // Fetch repositories list on mount
   useEffect(() => {
     fetchRepos();
   }, []);
+
+  // Poll repos list every 5 seconds if any repository is currently syncing
+  useEffect(() => {
+    const hasSyncingRepo = dbRepos.some((repo) => repo.syncStatus === "syncing");
+    if (!hasSyncingRepo) return;
+
+    const interval = setInterval(() => {
+      fetchRepos();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [dbRepos]);
 
   // Fetch metrics whenever selectedRepoId changes
   useEffect(() => {
@@ -204,6 +219,14 @@ export default function DashboardOverview() {
                   Overview
                 </button>
                 <button
+                  onClick={() => setActiveTab("timeline")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "timeline" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  Timeline
+                </button>
+                <button
                   onClick={() => setActiveTab("commits")}
                   className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
                     ${activeTab === "commits" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
@@ -235,6 +258,22 @@ export default function DashboardOverview() {
                   <Terminal className="h-3.5 w-3.5" />
                   Events
                 </button>
+                <button
+                  onClick={() => setActiveTab("settings")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "settings" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  Settings
+                </button>
+                <button
+                  onClick={() => setActiveTab("history")}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition
+                    ${activeTab === "history" ? "bg-slate-900 text-white shadow" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  History
+                </button>
               </div>
             )}
           </div>
@@ -248,6 +287,10 @@ export default function DashboardOverview() {
                   onRefresh={handleRefreshMetrics}
                   repositoryId={selectedRepoId}
                 />
+              )}
+
+              {activeTab === "timeline" && (
+                <RepoTimeline repositoryId={selectedRepoId} />
               )}
 
               {activeTab === "commits" && (
@@ -264,6 +307,18 @@ export default function DashboardOverview() {
 
               {activeTab === "webhooks" && (
                 <WebhookEventLog repositoryId={selectedRepoId} />
+              )}
+
+              {activeTab === "settings" && (
+                <RepoSettings
+                  repositoryId={selectedRepoId}
+                  onRefreshRepos={fetchRepos}
+                  onSelectTab={(tab) => setActiveTab(tab)}
+                />
+              )}
+
+              {activeTab === "history" && (
+                <SyncHistory />
               )}
             </div>
           ) : (
