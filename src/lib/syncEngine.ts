@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { fetchGitHubWithRetry } from "./github";
 import { createProjectEvent, findPREventId, backfillTimelineEvents } from "./eventHelper";
-import { EventType, EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
+import { EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
+import { EventType } from "./eventHelper";
 
 // Bulletproof helper to handle contributor upserts avoiding multiple unique constraint violations
 async function getOrCreateContributor(
@@ -161,7 +162,7 @@ async function syncPRReviewsAndComments(
 
       reviewIdMap.set(reviewGithubId, dbReview.id);
 
-      let reviewType: EventType = EventType.REVIEW_SUBMITTED;
+      let reviewType: string = EventType.REVIEW_SUBMITTED;
       let importance: EventImportance = EventImportance.LOW;
       let reviewTitle = `PR Review Submitted by ${senderLogin}`;
 
@@ -254,7 +255,7 @@ async function syncPRReviewsAndComments(
       // Generate review comment event, setting review event (if found) or PR event as parent
       const commentParentId = reviewId
         ? await db.projectEvent.findFirst({
-            where: { repositoryId, entityId: reviewId, eventType: { in: [EventType.REVIEW_SUBMITTED, EventType.REVIEW_APPROVED, EventType.CHANGES_REQUESTED] } },
+            where: { repositoryId, entityId: reviewId, entityType: "PULL_REQUEST" },
             select: { id: true },
           }).then((e) => e?.id) || parentEventId
         : parentEventId;

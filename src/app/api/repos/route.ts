@@ -97,13 +97,13 @@ export async function POST(req: NextRequest) {
 
     const userId = session.user.id;
     const body = await req.json();
-    const { owner, name } = body;
+    const { owner, name, createNewOnGitHub, description: repoDesc, isPrivate } = body;
 
-    if (!owner || !name) {
-      return NextResponse.json({ error: "Missing owner or name" }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: "Missing repository name" }, { status: 400 });
     }
 
-    // Find user's access token to fetch repository metadata
+    // Find user's access token to fetch or create repository
     const userAccount = await db.account.findFirst({
       where: { userId, provider: "github" },
     });
@@ -112,25 +112,60 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "GitHub Account not found" }, { status: 400 });
     }
 
-    // Fetch repository information from GitHub API
-    const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${name}`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${userAccount.access_token}`,
-        "User-Agent": "github-analytics-dashboard",
-      },
-      cache: "no-store",
-    });
+    let repoData: any;
 
-    if (!repoResponse.ok) {
-      const errText = await repoResponse.text();
-      return NextResponse.json(
-        { error: `Could not fetch repo metadata from GitHub: ${errText}` },
-        { status: repoResponse.status }
-      );
+    if (createNewOnGitHub) {
+      // Create a brand new repository directly on GitHub
+      const createResponse = await fetch("https://api.github.com/user/repos", {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${userAccount.access_token}`,
+          "User-Agent": "github-analytics-dashboard",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          description: repoDesc || "",
+          private: isPrivate ?? false,
+          auto_init: true, // auto initialize with README so default branch exists
+        }),
+      });
+
+      if (!createResponse.ok) {
+        const errText = await createResponse.text();
+        return NextResponse.json(
+          { error: `Could not create repository on GitHub: ${errText}` },
+          { status: createResponse.status }
+        );
+      }
+
+      repoData = await createResponse.json();
+    } else {
+      if (!owner) {
+        return NextResponse.json({ error: "Missing repository owner" }, { status: 400 });
+      }
+
+      // Fetch repository information from GitHub API
+      const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${name}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${userAccount.access_token}`,
+          "User-Agent": "github-analytics-dashboard",
+        },
+        cache: "no-store",
+      });
+
+      if (!repoResponse.ok) {
+        const errText = await repoResponse.text();
+        return NextResponse.json(
+          { error: `Could not fetch repo metadata from GitHub: ${errText}` },
+          { status: repoResponse.status }
+        );
+      }
+
+      repoData = await repoResponse.json();
     }
-
-    const repoData = await repoResponse.json();
 
     // Check if repository already exists in DB
     const existingRepo = await db.repository.findUnique({

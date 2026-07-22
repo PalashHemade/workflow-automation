@@ -1,0 +1,10 @@
+{
+  "historicalSyncTimeMs": 0,
+  "incrementalSyncTimeMs": 0,
+  "webhookLatencyMs": 0,
+  "apiCalls": 0,
+  "databaseRowsCreated": 0,
+  "duplicatesPrevented": 0,
+  "timelineEventsGenerated": 0,
+  "failedAssertions": 0
+}

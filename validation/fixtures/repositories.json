@@ -1,0 +1,14 @@
+[
+  {
+    "owner": "octocat",
+    "repo": "Hello-World"
+  },
+  {
+    "owner": "facebook",
+    "repo": "react"
+  },
+  {
+    "owner": "vercel",
+    "repo": "next.js"
+  }
+]

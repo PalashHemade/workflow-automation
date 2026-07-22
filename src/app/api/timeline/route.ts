@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions, checkRepositoryAccess } from "@/lib/auth";
-import { EventType, EventImportance } from "@prisma/client";
+import { EventEntityType, EventImportance } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
     // 3. Parse query parameters
     const limit = Math.max(1, Math.min(100, Number(searchParams.get("limit")) || 15));
     const cursor = searchParams.get("cursor"); // event ID for cursor pagination
-    const eventTypesRaw = searchParams.get("eventTypes"); // comma-separated enums
+    const entityTypesRaw = searchParams.get("eventTypes") || searchParams.get("entityTypes");
     const actor = searchParams.get("actor")?.trim();
-    const importanceRaw = searchParams.get("importance"); // comma-separated enums
+    const importanceRaw = searchParams.get("importance");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const search = searchParams.get("search")?.trim();
@@ -47,23 +47,20 @@ export async function GET(req: NextRequest) {
       repositoryId,
     };
 
-    // Filter event types
-    if (eventTypesRaw) {
-      const types = eventTypesRaw
+    if (entityTypesRaw) {
+      const types = entityTypesRaw
         .split(",")
-        .map((t) => t.trim() as EventType)
-        .filter((t) => Object.values(EventType).includes(t));
+        .map((t) => t.trim() as EventEntityType)
+        .filter((t) => Object.values(EventEntityType).includes(t));
       if (types.length > 0) {
-        where.eventType = { in: types };
+        where.entityType = { in: types };
       }
     }
 
-    // Filter actor
     if (actor) {
       where.actorName = { contains: actor, mode: "insensitive" };
     }
 
-    // Filter importance
     if (importanceRaw) {
       const importances = importanceRaw
         .split(",")
@@ -74,7 +71,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Filter dates
     const dateFilter: any = {};
     if (startDate) {
       dateFilter.gte = new Date(startDate);
@@ -86,7 +82,6 @@ export async function GET(req: NextRequest) {
       where.createdAt = dateFilter;
     }
 
-    // Search query (matching title, description, and actorName)
     if (search) {
       where.OR = [
         { title: { contains: search, mode: "insensitive" } },
@@ -95,7 +90,6 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // Cursor Pagination boundary check
     if (cursor) {
       const cursorEvent = await db.projectEvent.findUnique({
         where: { id: cursor },
@@ -103,7 +97,6 @@ export async function GET(req: NextRequest) {
       });
 
       if (cursorEvent) {
-        // Find events older than cursor, or with equal time but smaller ID lexicographically
         where.AND = [
           ...(where.AND || []),
           {
@@ -121,7 +114,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 5. Fetch events with take = limit + 1
     const events = await db.projectEvent.findMany({
       where,
       orderBy: [
@@ -137,7 +129,7 @@ export async function GET(req: NextRequest) {
     if (hasNextPage) {
       const nextItem = events[limit - 1];
       nextCursor = nextItem.id;
-      events.pop(); // Remove the extra check item
+      events.pop();
     }
 
     return NextResponse.json({

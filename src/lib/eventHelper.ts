@@ -1,10 +1,27 @@
 import { db } from "./db";
-import { EventType, EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
+import { EventEntityType, EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
+
+export const EventType = {
+  COMMIT_CREATED: "COMMIT",
+  PR_OPENED: "PULL_REQUEST",
+  PR_UPDATED: "PULL_REQUEST",
+  PR_CLOSED: "PULL_REQUEST",
+  PR_MERGED: "PULL_REQUEST",
+  REVIEW_SUBMITTED: "PULL_REQUEST",
+  REVIEW_APPROVED: "PULL_REQUEST",
+  CHANGES_REQUESTED: "PULL_REQUEST",
+  REVIEW_COMMENT: "PULL_REQUEST",
+  BRANCH_CREATED: "SYSTEM",
+  BRANCH_DELETED: "SYSTEM",
+  REPOSITORY_SYNCED: "SYSTEM",
+  SYNC_FAILED: "SYSTEM",
+  WEBHOOK_RECEIVED: "SYSTEM",
+} as const;
 
 interface ProjectEventInput {
   repositoryId: string;
-  eventType: EventType;
-  entityType: string;
+  eventType?: string;
+  entityType: string | EventEntityType;
   entityId: string | null;
   parentEventId?: string | null;
   actorId?: string | null;
@@ -17,18 +34,33 @@ interface ProjectEventInput {
   createdAt?: Date;
 }
 
+function parseEntityType(input: string | EventEntityType): EventEntityType {
+  if (Object.values(EventEntityType).includes(input as EventEntityType)) {
+    return input as EventEntityType;
+  }
+  const upper = String(input).toUpperCase();
+  if (upper.includes("COMMIT")) return EventEntityType.COMMIT;
+  if (upper.includes("PR") || upper.includes("PULL") || upper.includes("REVIEW")) return EventEntityType.PULL_REQUEST;
+  if (upper.includes("STORY")) return EventEntityType.STORY;
+  if (upper.includes("TASK") || upper.includes("BUG")) return EventEntityType.TASK;
+  if (upper.includes("SPRINT")) return EventEntityType.SPRINT;
+  if (upper.includes("PIPELINE") || upper.includes("BUILD")) return EventEntityType.PIPELINE;
+  if (upper.includes("AI")) return EventEntityType.AI_INSIGHT;
+  return EventEntityType.SYSTEM;
+}
+
 /**
  * Creates a ProjectEvent in the database, avoiding duplicate event entries.
  */
 export async function createProjectEvent(input: ProjectEventInput) {
   try {
-    // Deduplication check: for entity-based events (commits, PR actions, reviews, branches, comments),
-    // ensure we don't insert duplicate events of the same EventType for the same entityId.
+    const validEntityType = parseEntityType(input.entityType);
+
     if (input.entityId) {
       const existing = await db.projectEvent.findFirst({
         where: {
           repositoryId: input.repositoryId,
-          eventType: input.eventType,
+          entityType: validEntityType,
           entityId: input.entityId,
         },
       });
@@ -40,8 +72,7 @@ export async function createProjectEvent(input: ProjectEventInput) {
     return await db.projectEvent.create({
       data: {
         repositoryId: input.repositoryId,
-        eventType: input.eventType,
-        entityType: input.entityType,
+        entityType: validEntityType,
         entityId: input.entityId,
         parentEventId: input.parentEventId || null,
         actorId: input.actorId || null,
@@ -55,215 +86,94 @@ export async function createProjectEvent(input: ProjectEventInput) {
         processedAt: new Date(),
         metadata: input.metadata || {},
         createdAt: input.createdAt || new Date(),
+        timestamp: input.createdAt || new Date(),
       },
     });
   } catch (err) {
-    console.error(`Failed to create ProjectEvent of type ${input.eventType}:`, err);
+    console.error("Error creating project event:", err);
     return null;
   }
 }
 
 /**
- * Helper to link child events to their parent events (e.g. Commit/Review -> PR)
+ * Helper to locate parent PR event ID for reviews/comments.
  */
-export async function findPREventId(repositoryId: string, prId: string): Promise<string | null> {
+export async function findPREventId(repositoryId: string, pullRequestId: string): Promise<string | null> {
   const prEvent = await db.projectEvent.findFirst({
     where: {
       repositoryId,
-      entityId: prId,
-      eventType: EventType.PR_OPENED,
+      entityType: EventEntityType.PULL_REQUEST,
+      entityId: pullRequestId,
     },
-    select: { id: true },
   });
   return prEvent?.id || null;
 }
 
 /**
- * Scan database records for a repository and generate historical timeline events
+ * Backfills missing historical events for commits and PRs.
  */
 export async function backfillTimelineEvents(repositoryId: string) {
-  try {
-    // 1. Commits
-    const commits = await db.commit.findMany({
-      where: { repositoryId },
-      orderBy: { committedAt: "asc" },
+  const repo = await db.repository.findUnique({
+    where: { id: repositoryId },
+    include: {
+      commits: true,
+      pullRequests: {
+        include: {
+          reviews: { include: { comments: true } },
+        },
+      },
+    },
+  });
+
+  if (!repo) return;
+
+  // 1. Backfill Commits
+  for (const commit of repo.commits) {
+    await createProjectEvent({
+      repositoryId,
+      entityType: EventEntityType.COMMIT,
+      entityId: commit.id,
+      actorName: commit.authorName,
+      title: `Commit created: ${commit.sha.slice(0, 7)}`,
+      description: commit.message,
+      importance: EventImportance.NORMAL,
+      source: EventSource.SYNC,
+      metadata: { sha: commit.sha, authorEmail: commit.authorEmail },
+      createdAt: commit.committedAt,
+    });
+  }
+
+  // 2. Backfill PRs
+  for (const pr of repo.pullRequests) {
+    const prEvent = await createProjectEvent({
+      repositoryId,
+      entityType: EventEntityType.PULL_REQUEST,
+      entityId: pr.id,
+      actorName: pr.authorName,
+      title: `PR #${pr.number} ${pr.state}`,
+      description: pr.title,
+      importance: EventImportance.NORMAL,
+      source: EventSource.SYNC,
+      metadata: { number: pr.number, state: pr.state, merged: pr.merged },
+      createdAt: pr.createdAt,
     });
 
-    for (const c of commits) {
-      await createProjectEvent({
-        repositoryId,
-        eventType: EventType.COMMIT_CREATED,
-        entityType: "Commit",
-        entityId: c.id,
-        actorName: c.authorName,
-        title: `Commit Pushed: ${c.message.split("\n")[0]}`,
-        description: c.message,
-        importance: EventImportance.LOW,
-        source: EventSource.SYNC,
-        createdAt: c.committedAt,
-        metadata: {
-          sha: c.sha,
-          message: c.message,
-          branch: "main",
-          filesChanged: 0,
-          insertions: 0,
-          deletions: 0,
-        },
-      });
-    }
-
-    // 2. PRs
-    const prs = await db.pullRequest.findMany({
-      where: { repositoryId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    for (const pr of prs) {
-      const prOpenedEvent = await createProjectEvent({
-        repositoryId,
-        eventType: EventType.PR_OPENED,
-        entityType: "PullRequest",
-        entityId: pr.id,
-        actorName: pr.authorName,
-        title: `PR Opened: #${pr.number} ${pr.title}`,
-        description: pr.title,
-        importance: EventImportance.NORMAL,
-        source: EventSource.SYNC,
-        createdAt: pr.createdAt,
-        metadata: {
-          prNumber: pr.number,
-          title: pr.title,
-          state: pr.state,
-          commitsCount: 0,
-          filesChanged: 0,
-          reviewsCount: 0,
-          mergeDurationMinutes: null,
-        },
-      });
-
-      if (pr.state === "closed" && !pr.merged) {
+    if (prEvent) {
+      for (const review of pr.reviews) {
         await createProjectEvent({
           repositoryId,
-          eventType: EventType.PR_CLOSED,
-          entityType: "PullRequest",
-          entityId: pr.id,
-          parentEventId: prOpenedEvent?.id,
-          actorName: pr.authorName,
-          title: `PR Closed: #${pr.number} ${pr.title}`,
-          description: pr.title,
+          entityType: EventEntityType.PULL_REQUEST,
+          entityId: review.id,
+          parentEventId: prEvent.id,
+          actorName: review.authorName,
+          title: `Review ${review.state} on PR #${pr.number}`,
+          description: review.body,
           importance: EventImportance.NORMAL,
           source: EventSource.SYNC,
-          createdAt: pr.closedAt || pr.updatedAt,
-          metadata: {
-            prNumber: pr.number,
-            title: pr.title,
-            state: "closed",
-          },
-        });
-      }
-
-      if (pr.merged && pr.mergedAt) {
-        const mergeDurationMinutes = Math.round((pr.mergedAt.getTime() - pr.createdAt.getTime()) / (1000 * 60));
-        await createProjectEvent({
-          repositoryId,
-          eventType: EventType.PR_MERGED,
-          entityType: "PullRequest",
-          entityId: pr.id,
-          parentEventId: prOpenedEvent?.id,
-          actorName: pr.authorName,
-          title: `PR Merged: #${pr.number} ${pr.title}`,
-          description: pr.title,
-          importance: EventImportance.HIGH,
-          source: EventSource.SYNC,
-          createdAt: pr.mergedAt,
-          metadata: {
-            prNumber: pr.number,
-            title: pr.title,
-            state: "merged",
-            mergeDurationMinutes,
-          },
+          metadata: { reviewId: review.id, state: review.state },
+          createdAt: review.submittedAt,
         });
       }
     }
-
-    // 3. Reviews
-    const reviews = await db.review.findMany({
-      where: { pullRequest: { repositoryId } },
-      include: { pullRequest: true },
-      orderBy: { submittedAt: "asc" },
-    });
-
-    for (const r of reviews) {
-      const parentEventId = await findPREventId(repositoryId, r.pullRequestId);
-      let reviewType: EventType = EventType.REVIEW_SUBMITTED;
-      let importance: EventImportance = EventImportance.LOW;
-      let reviewTitle = `PR Review Submitted by ${r.authorName}`;
-
-      if (r.state === "APPROVED") {
-        reviewType = EventType.REVIEW_APPROVED;
-        importance = EventImportance.NORMAL;
-        reviewTitle = `PR Approved by ${r.authorName}`;
-      } else if (r.state === "CHANGES_REQUESTED") {
-        reviewType = EventType.CHANGES_REQUESTED;
-        importance = EventImportance.HIGH;
-        reviewTitle = `PR Changes Requested by ${r.authorName}`;
-      }
-
-      await createProjectEvent({
-        repositoryId,
-        eventType: reviewType,
-        entityType: "Review",
-        entityId: r.id,
-        parentEventId,
-        actorName: r.authorName,
-        title: reviewTitle,
-        description: r.body || null,
-        importance,
-        source: EventSource.SYNC,
-        createdAt: r.submittedAt,
-        metadata: {
-          reviewer: r.authorName,
-          reviewState: r.state,
-          commentsCount: 0,
-          prTitle: r.pullRequest.title,
-          prNumber: r.pullRequest.number,
-        },
-      });
-    }
-
-    // 4. Review Comments
-    const comments = await db.reviewComment.findMany({
-      where: { pullRequest: { repositoryId } },
-      include: { pullRequest: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    for (const c of comments) {
-      const parentEventId = await findPREventId(repositoryId, c.pullRequestId);
-      await createProjectEvent({
-        repositoryId,
-        eventType: EventType.REVIEW_COMMENT,
-        entityType: "ReviewComment",
-        entityId: c.id,
-        parentEventId: parentEventId,
-        actorName: c.authorName,
-        title: `New PR Comment by ${c.authorName}`,
-        description: c.body,
-        importance: EventImportance.LOW,
-        source: EventSource.SYNC,
-        createdAt: c.createdAt,
-        metadata: {
-          reviewer: c.authorName,
-          body: c.body,
-          path: c.path,
-          line: c.line,
-          prTitle: c.pullRequest.title,
-          prNumber: c.pullRequest.number,
-        },
-      });
-    }
-  } catch (err) {
-    console.error(`Error in backfillTimelineEvents for repo ${repositoryId}:`, err);
   }
 }
-

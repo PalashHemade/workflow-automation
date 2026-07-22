@@ -1,0 +1,188 @@
+[
+  {
+    "suiteName": "Smoke",
+    "durationMs": 6172,
+    "passed": 6,
+    "failed": 0
+  },
+  {
+    "suiteName": "Unit-Auth",
+    "durationMs": 35,
+    "passed": 4,
+    "failed": 0
+  },
+  {
+    "suiteName": "Unit-Webhook",
+    "durationMs": 279,
+    "passed": 4,
+    "failed": 0
+  },
+  {
+    "suiteName": "Unit-GithubFetch",
+    "durationMs": 107,
+    "passed": 3,
+    "failed": 0
+  },
+  {
+    "suiteName": "Unit-Scheduler",
+    "durationMs": 19,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Unit-SyncEngine",
+    "durationMs": 30,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Unit-Analytics",
+    "durationMs": 228,
+    "passed": 2,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integration-Repository",
+    "durationMs": 2339,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integration-Commits",
+    "durationMs": 1231,
+    "passed": 2,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integration-Pulls",
+    "durationMs": 932,
+    "passed": 2,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integration-Timeline",
+    "durationMs": 29,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integration-Metrics",
+    "durationMs": 49,
+    "passed": 2,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integration-Lifecycle",
+    "durationMs": 98,
+    "passed": 3,
+    "failed": 0
+  },
+  {
+    "suiteName": "Security-OAuth",
+    "durationMs": 97,
+    "passed": 6,
+    "failed": 0
+  },
+  {
+    "suiteName": "Security-WebhookSignature",
+    "durationMs": 32,
+    "passed": 2,
+    "failed": 0
+  },
+  {
+    "suiteName": "Security-Authorization",
+    "durationMs": 64,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Regression-BigInt",
+    "durationMs": 645,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Regression-PreviousBugs",
+    "durationMs": 0,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "System-Onboarding",
+    "durationMs": 31055,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "System-Sync",
+    "durationMs": 1196,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "System-Webhook",
+    "durationMs": 30,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "System-FullRepository",
+    "durationMs": 1542,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integrity-Relations",
+    "durationMs": 26,
+    "passed": 4,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integrity-CascadeDelete",
+    "durationMs": 27,
+    "passed": 1,
+    "failed": 0
+  },
+  {
+    "suiteName": "Integrity-DuplicateDetection",
+    "durationMs": 21,
+    "passed": 3,
+    "failed": 0
+  },
+  {
+    "suiteName": "Performance-HistoricalSync",
+    "durationMs": 30829,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "Performance-IncrementalSync",
+    "durationMs": 33551,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "Performance-WebhookLatency",
+    "durationMs": 5,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "Unit-JiraSync",
+    "durationMs": 4,
+    "passed": 0,
+    "failed": 1
+  },
+  {
+    "suiteName": "Unit-CorrelationEngine",
+    "durationMs": 4,
+    "passed": 1,
+    "failed": 1
+  },
+  {
+    "suiteName": "Integration-Project",
+    "durationMs": 3,
+    "passed": 0,
+    "failed": 1
+  }
+]

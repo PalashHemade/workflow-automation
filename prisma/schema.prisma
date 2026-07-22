@@ -36,14 +36,16 @@ model Session {
 }
 
 model User {
-  id            String       @id @default(cuid())
-  name          String?
-  email         String?      @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  repositories  Repository[]
+  id                  String               @id @default(cuid())
+  name                String?
+  email               String?              @unique
+  emailVerified       DateTime?
+  image               String?
+  accounts            Account[]
+  sessions            Session[]
+  repositories        Repository[]
+  engineeringProjects EngineeringProject[]
+  projectMemberships  ProjectMember[]
 }
 
 model VerificationToken {
@@ -55,51 +57,518 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// Repository Analytics Domain Models
-model Repository {
-  id             String        @id @default(cuid())
-  githubId       BigInt        @unique // GitHub's internal repository ID
-  name           String
-  owner          String
-  fullName       String
-  htmlUrl        String
-  isTracked      Boolean       @default(false)
-  webhookEnabled Boolean       @default(false) // Tracks if webhooks are set up
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  
-  userId         String
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trackingUserIds String       @default("")
+// Domain Enums for Phase 5
+enum SyncStatus {
+  IDLE
+  SYNCING
+  SUCCESS
+  FAILED
+}
 
+enum SprintState {
+  FUTURE
+  ACTIVE
+  CLOSED
+}
+
+enum PipelineStatus {
+  SUCCESS
+  FAILURE
+  IN_PROGRESS
+  ABORTED
+}
+
+enum IntegrationProvider {
+  GITHUB
+  JIRA
+  JENKINS
+  SLACK
+  SONARQUBE
+  GITLAB
+  AZURE_DEVOPS
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum CorrelationMethod {
+  BRANCH
+  COMMIT
+  PR_TITLE
+  PR_DESCRIPTION
+  MANUAL
+  AI
+}
+
+enum InsightSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum InsightStatus {
+  ACTIVE
+  RESOLVED
+  IGNORED
+}
+
+enum InsightType {
+  RISK
+  SUMMARY
+  BOTTLENECK
+  TECH_DEBT
+  DEPLOYMENT
+  SECURITY
+}
+
+enum EventEntityType {
+  COMMIT
+  PULL_REQUEST
+  STORY
+  TASK
+  SPRINT
+  PIPELINE
+  AI_INSIGHT
+  SYSTEM
+}
+
+enum EventImportance {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum EventSource {
+  WEBHOOK
+  SYNC
+  MANUAL
+  SYSTEM
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Engineering Project (Aggregate Root Entity)
+model EngineeringProject {
+  id            String      @id @default(cuid())
+  name          String
+  description   String?
+  ownerId       String
+  owner         User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   
-  // Metadata for Incremental Sync
+  repositoryId  String      @unique
+  repository    Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  
+  primaryBranch String      @default("main")
+  defaultBranch String      @default("main")
+  archived      Boolean     @default(false)
+
+  syncStatus    SyncStatus  @default(IDLE)
+  lastSyncAt    DateTime?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  integrations     ProjectIntegration[]
+  members          ProjectMember[]
+  sprints          Sprint[]
+  epics            Epic[]
+  stories          Story[]
+  tasks            JiraTask[]
+  pipelineRuns     PipelineRun[]
+  syncJobs         SyncJob[]
+  projectEvents    ProjectEvent[]
+  knowledge        ProjectKnowledge?
+  moduleKnowledge  ModuleKnowledge[]
+  aiInsights       AIInsight[]
+  metrics          ProjectMetrics?
+}
+
+// Project Provider Integration Config & Sync State
+model ProjectIntegration {
+  id                   String              @id @default(cuid())
+  provider             IntegrationProvider
+  status               IntegrationStatus   @default(CONNECTED)
+  config               Json?
+
+  lastSyncAt           DateTime?
+  lastSuccessfulSync   DateTime?
+  lastFailure          DateTime?
+  lastError            String?             @db.Text
+
+  engineeringProjectId String
+  engineeringProject   EngineeringProject  @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  credentials          OAuthCredential[]
+  pipelineRuns         PipelineRun[]
+  syncJobs             SyncJob[]
+
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@unique([engineeringProjectId, provider])
+}
+
+// Dedicated OAuth Credentials for Integrations
+model OAuthCredential {
+  id            String             @id @default(cuid())
+  provider      IntegrationProvider
+  accessToken   String             @db.Text
+  refreshToken  String?            @db.Text
+  expiresAt     DateTime?
+  accountId     String?
+  accountName   String?
+
+  integrationId String
+  integration   ProjectIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+// Project Team Member Access and Mapping
+model ProjectMember {
+  id                   String             @id @default(cuid())
+  role                 String             @default("MEMBER")
+  githubUsername       String?
+  jiraAccountId        String?
+  permissions          Json?
+
+  engineeringProjectId String
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  userId               String?
+  user                 User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+// Jira Workspace Credential Entity
+model JiraWorkspace {
+  id           String    @id @default(cuid())
+  cloudId      String    @unique
+  name         String
+  baseUrl      String
+  accessToken  String    @db.Text
+  refreshToken String?   @db.Text
+  expiresAt    DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// Sprint Entity
+model Sprint {
+  id        String             @id @default(cuid())
+  jiraId    String             @unique
+  name      String
+  state     SprintState
+  startDate DateTime?
+  endDate   DateTime?
+
+  projectId String
+  project   EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  stories   Story[]
+}
+
+// Epic Entity
+model Epic {
+  id        String             @id @default(cuid())
+  jiraId    String             @unique
+  key       String
+  summary   String
+  status    String
+
+  projectId String
+  project   EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  stories   Story[]
+}
+
+// Story Entity
+model Story {
+  id          String             @id @default(cuid())
+  jiraId      String             @unique
+  key         String
+  summary     String
+  description String?            @db.Text
+  priority    String?
+  status      String
+  assigneeId  String?
+  sprintId    String?
+  epicId      String?
+
+  projectId   String
+  project     EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  sprint      Sprint?            @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  epic        Epic?              @relation(fields: [epicId], references: [id], onDelete: SetNull)
+
+  storyCommits      StoryCommit[]
+  storyPullRequests StoryPullRequest[]
+  tasks             JiraTask[]
+}
+
+// Junction Table for Story and Commit Correlation (Many-to-Many)
+model StoryCommit {
+  id        String            @id @default(cuid())
+  storyId   String
+  story     Story             @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  commitId  String
+  commit    Commit            @relation(fields: [commitId], references: [id], onDelete: Cascade)
+
+  confidence Float            @default(100.0)
+  matchedBy  CorrelationMethod @default(COMMIT)
+  reason     String?          @db.Text
+
+  createdAt DateTime          @default(now())
+
+  @@unique([storyId, commitId])
+  @@index([storyId])
+  @@index([commitId])
+}
+
+// Junction Table for Story and Pull Request Correlation (Many-to-Many)
+model StoryPullRequest {
+  id            String            @id @default(cuid())
+  storyId       String
+  story         Story             @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  pullRequestId String
+  pullRequest   PullRequest       @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+
+  confidence    Float             @default(100.0)
+  matchedBy     CorrelationMethod @default(PR_TITLE)
+  reason        String?           @db.Text
+
+  createdAt     DateTime          @default(now())
+
+  @@unique([storyId, pullRequestId])
+  @@index([storyId])
+  @@index([pullRequestId])
+}
+
+// Jira Task / Bug Entity
+model JiraTask {
+  id        String             @id @default(cuid())
+  jiraId    String             @unique
+  key       String
+  summary   String
+  issueType String
+  status    String
+  priority  String?
+  assignee  String?
+
+  storyId   String?
+  story     Story?             @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  projectId String
+  project   EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// CI/CD Pipeline Run Entity
+model PipelineRun {
+  id                   String             @id @default(cuid())
+  integrationId        String
+  integration          ProjectIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  pipelineId           String
+  pipelineName         String
+  runNumber            Int
+  branch               String?
+  commitSha            String?
+  status               PipelineStatus     @default(IN_PROGRESS)
+  triggeredBy          String?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  durationMs           Int?
+  logsUrl              String?            @db.Text
+  artifactsUrl         String?            @db.Text
+
+  engineeringProjectId String
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+}
+
+// operational Sync Job Tracker
+model SyncJob {
+  id                   String              @id @default(cuid())
+  integrationId        String?
+  integration          ProjectIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  provider             IntegrationProvider
+  startedAt            DateTime            @default(now())
+  finishedAt           DateTime?
+  status               SyncStatus          @default(SYNCING)
+  itemsProcessed       Int                 @default(0)
+  errors               Json?
+  durationMs           Int                 @default(0)
+
+  engineeringProjectId String
+  engineeringProject   EngineeringProject  @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+}
+
+// Historical Repository Snapshots for Charting
+model RepositorySnapshot {
+  id                 String     @id @default(cuid())
+  repositoryId       String
+  repository         Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  commitCount        Int        @default(0)
+  pullRequestCount   Int        @default(0)
+  contributorsCount  Int        @default(0)
+  openIssuesCount    Int        @default(0)
+  closedIssuesCount  Int        @default(0)
+  starsCount         Int        @default(0)
+  forksCount         Int        @default(0)
+  size               Int        @default(0)
+  capturedAt         DateTime   @default(now())
+
+  @@index([repositoryId])
+  @@index([capturedAt])
+}
+
+// Subsystem / Module Architectural Knowledge
+model ModuleKnowledge {
+  id                   String             @id @default(cuid())
+  name                 String
+  owner                String?
+  dependencies         Json?
+  dependents           Json?
+  healthScore          Float              @default(100.0)
+  riskScore            Float              @default(0.0)
+  complexityScore      Float?             @default(1.0)
+  coverage             Float?             @default(80.0)
+  lastModified         DateTime?          @default(now())
+
+  engineeringProjectId String
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+}
+
+// Engineering Memory & Knowledge Base
+model ProjectKnowledge {
+  id                   String             @id @default(cuid())
+  projectSummary       String?            @db.Text
+  architectureSummary  String?            @db.Text
+  riskSummary          String?            @db.Text
+  releaseSummary       String?            @db.Text
+  engineeringMemory    String?            @db.Text
+
+  engineeringProjectId String             @unique
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+}
+
+// Managed AI Alert & Recommendation Item
+model AIInsight {
+  id                   String             @id @default(cuid())
+  title                String
+  summary              String             @db.Text
+  type                 InsightType        @default(SUMMARY)
+  severity             InsightSeverity    @default(MEDIUM)
+  status               InsightStatus      @default(ACTIVE)
+  confidence           Float              @default(90.0)
+  resolved             Boolean            @default(false)
+  createdBy            String             @default("AI_AGENT")
+  expiresAt            DateTime?
+  metadata             Json?
+
+  engineeringProjectId String
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  createdAt            DateTime           @default(now())
+
+  @@index([engineeringProjectId])
+}
+
+// Pre-aggregated Dashboard Metrics (including DORA Metrics)
+model ProjectMetrics {
+  id                    String             @id @default(cuid())
+  engineeringProjectId  String             @unique
+  engineeringProject    EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  sprintVelocity        Float              @default(0)
+  leadTime              Float              @default(0)
+  cycleTime             Float              @default(0)
+  deploymentFrequency   Float              @default(0)
+  meanReviewTime        Float              @default(0)
+  bugRate               Float              @default(0)
+  riskScore             Float              @default(0)
+  changeFailureRate     Float              @default(0)
+  mttr                  Float              @default(0)
+  deploymentSuccessRate Float              @default(100.0)
+  openRiskCount         Int                @default(0)
+
+  calculatedAt          DateTime           @default(now())
+}
+
+// Existing & Expanded Repository Model
+model Repository {
+  id                      String              @id @default(cuid())
+  githubId                BigInt              @unique
+  name                    String
+  owner                   String
+  fullName                String
+  htmlUrl                 String
+  isTracked               Boolean             @default(false)
+  webhookEnabled          Boolean             @default(false)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  
+  userId                  String
+  user                    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackingUserIds         String              @default("")
+
+  // Webhook event tracking
+  lastWebhookEvent        String?
+  lastWebhookAt           DateTime?
+
+  // Project relation
+  engineeringProject      EngineeringProject?
+
   displayName             String?
-  isArchived              Boolean        @default(false)
+  isArchived              Boolean             @default(false)
   lastSyncedAt            DateTime?
   lastSuccessfulSyncAt    DateTime?
   lastFailedSyncAt        DateTime?
   lastSuccessfulCommitSha String?
   lastProcessedPullRequest Int?
-  syncStatus              String         @default("idle") // idle, syncing, success, failed
-  lastSyncError           String?        @db.Text
-  syncFailureCount        Int            @default(0)
+  syncStatus              String              @default("idle")
+  lastSyncError           String?             @db.Text
+  syncFailureCount        Int                 @default(0)
   nextAllowedSyncAt       DateTime?
-  pollingInterval         Int            @default(60) // in minutes
+  pollingInterval         Int                 @default(60)
   
-  commits        Commit[]
-  pullRequests   PullRequest[]
-  branches       Branch[]
-  webhookEvents  WebhookEvent[]
-  webhook        RepositoryWebhook?
-  syncLogs       BackgroundSyncLog[]
-  projectEvents  ProjectEvent[]
+  commits                 Commit[]
+  pullRequests            PullRequest[]
+  branches                Branch[]
+  webhookEvents           WebhookEvent[]
+  webhook                 RepositoryWebhook?
+  syncLogs                BackgroundSyncLog[]
+  projectEvents           ProjectEvent[]
+  snapshots               RepositorySnapshot[]
 }
 
 model Contributor {
   id             String        @id @default(cuid())
-  githubId       BigInt?       @unique // GitHub User ID
-  login          String        @unique // GitHub User login/username
+  githubId       BigInt?       @unique
+  login          String        @unique
   name           String?
   email          String?
   avatarUrl      String?
@@ -111,52 +580,54 @@ model Contributor {
 }
 
 model Commit {
-  id             String       @id @default(cuid())
-  sha            String       @unique // Commit hash
+  id             String        @id @default(cuid())
+  sha            String        @unique
   message        String
   url            String
   committedAt    DateTime
   
   repositoryId   String
-  repository     Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  repository     Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   
   contributorId  String?
-  contributor    Contributor? @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  contributor    Contributor?  @relation(fields: [contributorId], references: [id], onDelete: SetNull)
   authorName     String
   authorEmail    String
   authorAvatar   String?
 
   files          CommitFile[]
+  storyCommits   StoryCommit[]
 
   @@index([repositoryId])
   @@index([committedAt])
 }
 
 model PullRequest {
-  id             String       @id @default(cuid())
-  githubId       BigInt       @unique // GitHub Pull Request node ID
-  number         Int          // PR number in repository
+  id             String             @id @default(cuid())
+  githubId       BigInt             @unique
+  number         Int
   title          String
-  state          String       // open, closed, merged
+  state          String
   url            String
   createdAt      DateTime
   updatedAt      DateTime
   closedAt       DateTime?
   mergedAt       DateTime?
-  merged         Boolean      @default(false)
+  merged         Boolean            @default(false)
   
   repositoryId   String
-  repository     Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  repository     Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   
   contributorId  String?
-  contributor    Contributor? @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  contributor    Contributor?       @relation(fields: [contributorId], references: [id], onDelete: SetNull)
   authorName     String
   authorEmail    String
   authorAvatar   String?
 
-  files          PullRequestFile[]
-  reviews        Review[]
-  comments       ReviewComment[]
+  files             PullRequestFile[]
+  reviews           Review[]
+  comments          ReviewComment[]
+  storyPullRequests StoryPullRequest[]
 
   @@index([repositoryId])
   @@index([createdAt])
@@ -167,11 +638,11 @@ model CommitFile {
   commitId       String
   commit         Commit   @relation(fields: [commitId], references: [id], onDelete: Cascade)
   filename       String
-  status         String   // added, modified, removed, renamed
+  status         String
   additions      Int
   deletions      Int
   changes        Int
-  patch          String?  @db.Text // Unified diff/patch
+  patch          String?  @db.Text
 
   @@index([commitId])
 }
@@ -191,16 +662,16 @@ model PullRequestFile {
 }
 
 model Review {
-  id             String         @id @default(cuid())
-  githubId       BigInt         @unique
+  id             String          @id @default(cuid())
+  githubId       BigInt          @unique
   pullRequestId  String
-  pullRequest    PullRequest    @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  pullRequest    PullRequest     @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
   contributorId  String?
-  contributor    Contributor?   @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  contributor    Contributor?    @relation(fields: [contributorId], references: [id], onDelete: SetNull)
   authorName     String
   authorAvatar   String?
-  body           String?        @db.Text
-  state          String         // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, etc.
+  body           String?         @db.Text
+  state          String
   submittedAt    DateTime
   comments       ReviewComment[]
 
@@ -246,8 +717,8 @@ model WebhookEvent {
   id             String      @id @default(cuid())
   repositoryId   String?
   repository     Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  eventType      String      // push, pull_request, create, delete, pull_request_review, pull_request_review_comment
-  action         String?     // opened, closed, synchronization, submitted, created, etc.
+  eventType      String
+  action         String?
   payload        String      @db.Text
   processedAt    DateTime    @default(now())
 
@@ -259,8 +730,8 @@ model RepositoryWebhook {
   id                     String     @id @default(cuid())
   repositoryId           String     @unique
   repository             Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  githubWebhookId        BigInt?    // Webhook ID returned by GitHub to allow automated deletion
-  status                 String     @default("active") // active, inactive, failed
+  githubWebhookId        BigInt?
+  status                 String     @default("active")
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
   lastSuccessfulDelivery DateTime?
@@ -274,8 +745,8 @@ model BackgroundSyncLog {
   repository        Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   startedAt         DateTime    @default(now())
   completedAt       DateTime?
-  syncType          String      // manual, webhook, scheduled
-  status            String      // pending, running, completed, failed
+  syncType          String
+  status            String
   commitsProcessed  Int         @default(0)
   prsProcessed      Int         @default(0)
   durationMs        Int         @default(0)
@@ -288,72 +759,40 @@ model BackgroundSyncLog {
 model BackgroundSyncStatus {
   id          String   @id @default("singleton")
   lastRunAt   DateTime @default(now())
-  status      String   @default("healthy") // healthy, degraded, failing
+  status      String   @default("healthy")
   errorMsg    String?  @db.Text
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
-enum EventType {
-  COMMIT_CREATED
-  PR_OPENED
-  PR_UPDATED
-  PR_CLOSED
-  PR_MERGED
-  REVIEW_SUBMITTED
-  REVIEW_APPROVED
-  CHANGES_REQUESTED
-  REVIEW_COMMENT
-  BRANCH_CREATED
-  BRANCH_DELETED
-  REPOSITORY_SYNCED
-  SYNC_FAILED
-  WEBHOOK_RECEIVED
-}
-
-enum EventImportance {
-  LOW
-  NORMAL
-  HIGH
-  CRITICAL
-}
-
-enum EventSource {
-  WEBHOOK
-  SYNC
-  MANUAL
-  SYSTEM
-}
-
-enum ProcessingStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-}
-
+// Generic Event Bus for Project Events (Normalized Domain)
 model ProjectEvent {
-  id               String            @id @default(cuid())
-  repositoryId     String
-  repository       Repository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  eventType        EventType
-  entityType       String            // e.g. Commit, PullRequest, Review, etc.
-  entityId         String?           // ID of the entity in the DB
-  parentEventId    String?           // Reference to parent ProjectEvent.id
-  actorId          String?           // contributorId or userId
-  actorName        String
-  title            String            @db.Text
-  description      String?           @db.Text
-  importance       EventImportance
-  source           EventSource
-  version          Int               @default(1)
-  processingStatus ProcessingStatus  @default(PENDING)
-  processedAt      DateTime?
-  metadata         Json              // Flexible schema-less details
-  createdAt        DateTime          @default(now())
+  id                   String              @id @default(cuid())
+  provider             IntegrationProvider @default(GITHUB)
+  entityType           EventEntityType     @default(COMMIT)
+  entityId             String?
+  parentEventId        String?
+  actorId              String?
+  actorName            String
+  title                String              @db.Text
+  description          String?             @db.Text
+  importance           EventImportance     @default(NORMAL)
+  source               EventSource         @default(SYSTEM)
+  version              Int                 @default(1)
+  processingStatus     ProcessingStatus    @default(PENDING)
+  processedAt          DateTime?
+  metadata             Json
+  timestamp            DateTime            @default(now())
+  createdAt            DateTime            @default(now())
 
+  engineeringProjectId String?
+  engineeringProject   EngineeringProject? @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  repositoryId         String?
+  repository           Repository?         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
   @@index([repositoryId])
-  @@index([createdAt])
-  @@index([eventType])
-  @@index([actorName])
+  @@index([timestamp])
+  @@index([entityType])
 }

@@ -54,8 +54,30 @@ export async function GET(req: NextRequest, { params }: { params: { number: stri
       return NextResponse.json({ error: "Pull Request not found" }, { status: 404 });
     }
 
+    // Serialize BigInt fields to strings to prevent JSON.stringify crashes
+    const serializedReviews = pullRequest.reviews.map((r) => ({
+      ...r,
+      githubId: r.githubId.toString(),
+      comments: r.comments.map((c) => ({
+        ...c,
+        githubId: c.githubId.toString(),
+      })),
+    }));
+
+    const serializedComments = pullRequest.comments.map((c) => ({
+      ...c,
+      githubId: c.githubId.toString(),
+    }));
+
+    const serializedPullRequest = {
+      ...pullRequest,
+      githubId: pullRequest.githubId.toString(),
+      reviews: serializedReviews,
+      comments: serializedComments,
+    };
+
     return NextResponse.json({
-      pullRequest,
+      pullRequest: serializedPullRequest,
     });
   } catch (error: any) {
     return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
