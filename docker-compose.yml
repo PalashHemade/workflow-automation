@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────
+#  Docker Compose — GitHub Analytics Dashboard
+# ─────────────────────────────────────────────────────────────
+#  Usage:
+#    docker compose up --build        # build & start everything
+#    docker compose up -d             # start in background
+#    docker compose down              # stop & remove containers
+#    docker compose down -v           # stop & remove containers + volumes
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: github_analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d github_analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Next.js Application ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL to point to the Docker-internal hostname
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/github_analytics?schema=public"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

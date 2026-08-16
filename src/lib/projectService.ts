@@ -167,10 +167,9 @@ export async function createEngineeringProject(input: CreateProjectWizardInput) 
 
     if (existingModules === 0) {
       const modules = [
-        { name: "Authentication", owner: "Security Lead", complexityScore: 1.2, healthScore: 98.0, riskScore: 5.0 },
-        { name: "Payments & Billing", owner: "Finance Lead", complexityScore: 1.5, healthScore: 95.0, riskScore: 12.0 },
-        { name: "Notifications Engine", owner: "Core Team", complexityScore: 1.0, healthScore: 100.0, riskScore: 2.0 },
-        { name: "User Management", owner: "Product Team", complexityScore: 1.1, healthScore: 99.0, riskScore: 3.0 },
+        { name: "Core Engine", owner: "Core Team", complexityScore: 1.0, healthScore: 100.0, riskScore: 0.0 },
+        { name: "API & Data Sync", owner: "Backend Lead", complexityScore: 1.1, healthScore: 98.0, riskScore: 0.0 },
+        { name: "Authentication & Security", owner: "Security Lead", complexityScore: 1.2, healthScore: 100.0, riskScore: 0.0 },
       ];
 
       for (const mod of modules) {

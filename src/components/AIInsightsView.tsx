@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Sparkles, AlertTriangle, ShieldCheck, Cpu, ArrowRight, CheckCircle2, HelpCircle } from "lucide-react";
+import { Sparkles, AlertTriangle, ShieldCheck, Cpu, ArrowRight, CheckCircle2, HelpCircle, Play, Loader2, FileText, Activity } from "lucide-react";
 
 interface AIInsightsViewProps {
   projectId: string;
@@ -11,6 +11,9 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
   const [insights, setInsights] = useState<any[]>([]);
   const [queryData, setQueryData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [runningAgent, setRunningAgent] = useState(false);
+  const [agentLogs, setAgentLogs] = useState<any[]>([]);
+  const [lastAgentResult, setLastAgentResult] = useState<any | null>(null);
   const [activeQuery, setActiveQuery] = useState<string | null>("storiesNoCommits");
 
   useEffect(() => {
@@ -33,6 +36,37 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
     }
   };
 
+  const handleRunAgents = async (agentsToRun = ["SummaryAgent", "SprintHealthAgent"]) => {
+    setRunningAgent(true);
+    setAgentLogs([]);
+    setLastAgentResult(null);
+
+    try {
+      const res = await fetch("/api/agents/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, agents: agentsToRun }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setLastAgentResult(data);
+        const allLogs = (data.results || []).flatMap((r: any) => r.logs || []);
+        setAgentLogs(allLogs);
+        // Refresh insights list to display newly saved insights & knowledge
+        await fetchInsights();
+      } else {
+        const err = await res.json();
+        alert(`Agent Error: ${err.error || "Failed to execute agent"}`);
+      }
+    } catch (err: any) {
+      console.error("Error running AI agents:", err);
+      alert(`Agent execution failed: ${err.message}`);
+    } finally {
+      setRunningAgent(false);
+    }
+  };
+
   const sampleQueries = [
     { id: "storiesNoCommits", title: "Which stories have no commits?", icon: HelpCircle },
     { id: "prsWaiting", title: "Which PRs are waiting for review?", icon: HelpCircle },
@@ -42,43 +76,124 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* AI Header */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-900 via-purple-950 to-slate-900 text-white shadow-xl flex items-center justify-between">
+      {/* AI Header & Run Agents Button */}
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-900 via-purple-950 to-slate-900 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-2 max-w-xl">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold backdrop-blur-md">
             <Sparkles className="h-3.5 w-3.5 text-purple-300" />
-            <span>AI Readiness Engine</span>
+            <span>Agentic AI Framework (Groq + Llama 3.3)</span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight">Project AI Insights & Analytical Memory</h2>
+          <h2 className="text-2xl font-black tracking-tight">Project AI Insights & Autonomous Agents</h2>
           <p className="text-xs text-slate-300 leading-relaxed">
-            The database schema normalizes domain objects so AI agents can query sprint delays, developer ownership, unlinked code changes, and subsystem health.
+            Specialized agents execute deterministic 8-stage workflows over normalized database entities, generating memory summaries and risk alerts.
           </p>
         </div>
+
+        <button
+          onClick={() => handleRunAgents()}
+          disabled={runningAgent}
+          className="px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-bold shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center gap-2 disabled:opacity-50 shrink-0 cursor-pointer"
+        >
+          {runningAgent ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Executing Agents...</span>
+            </>
+          ) : (
+            <>
+              <Play className="h-4 w-4 fill-white" />
+              <span>Run AI Agent Pipeline</span>
+            </>
+          )}
+        </button>
       </div>
 
-      {/* Active AI Insights Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {insights.map((insight) => (
-          <div key={insight.id} className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
-                insight.severity === "HIGH" || insight.severity === "CRITICAL" ? "bg-red-500/10 text-red-600" : "bg-indigo-500/10 text-indigo-600"
-              }`}>
-                {insight.severity} • {insight.type}
+      {/* Live Agent Execution Output Panel (When agents run) */}
+      {(runningAgent || lastAgentResult) && (
+        <div className="bg-slate-900 text-slate-100 rounded-xl border border-slate-800 p-6 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 className="text-xs font-bold flex items-center gap-2 text-indigo-400 uppercase tracking-wider">
+              <Activity className="h-4 w-4 text-indigo-400" />
+              Agent Execution Lifecycle Console
+            </h3>
+            {lastAgentResult?.success && (
+              <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                Pipeline Completed Successfully
               </span>
-              <span className="text-xs text-slate-500 font-semibold">{insight.confidence}% Confidence</span>
-            </div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{insight.title}</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{insight.summary}</p>
+            )}
           </div>
-        ))}
+
+          <div className="space-y-1.5 max-h-60 overflow-y-auto text-xs font-mono bg-slate-950 p-4 rounded-lg border border-slate-800/80">
+            {agentLogs.length === 0 && runningAgent && (
+              <p className="text-slate-400 animate-pulse">Initializing Planner → Retriever → LLM Analyzer → Reflection → Memory...</p>
+            )}
+            {agentLogs.map((log, idx) => (
+              <div key={idx} className="flex gap-2">
+                <span className="text-slate-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                <span className="text-purple-400 font-bold">[{log.stage}]</span>
+                <span className="text-slate-200">{log.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active AI Insights Cards */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-indigo-500" />
+            Persisted AI Insights ({insights.length})
+          </h3>
+          <button
+            onClick={() => fetchInsights()}
+            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {insights.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
+            <Sparkles className="h-8 w-8 text-indigo-400 mx-auto opacity-50" />
+            <p className="text-xs text-slate-500">No AI insights generated yet. Click "Run AI Agent Pipeline" above to run agents.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {insights.map((insight) => (
+              <div key={insight.id} className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                    insight.severity === "HIGH" || insight.severity === "CRITICAL" ? "bg-red-500/10 text-red-600" : "bg-indigo-500/10 text-indigo-600"
+                  }`}>
+                    {insight.severity} • {insight.type}
+                  </span>
+                  <span className="text-xs text-slate-500 font-semibold">{insight.confidence}% Confidence</span>
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">{insight.title}</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{insight.summary}</p>
+
+                {insight.metadata?.recommendations && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recommendations:</span>
+                    <ul className="list-disc list-inside text-xs text-slate-700 dark:text-slate-300 space-y-0.5">
+                      {insight.metadata.recommendations.map((rec: string, idx: number) => (
+                        <li key={idx}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Interactive AI Query Playground */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-sm">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-indigo-500" />
-          Ask AI Agent (Sample Normalized Schema Queries)
+          Interactive Schema Explorer & Quick Agent Queries
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
@@ -86,7 +201,7 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
             <button
               key={q.id}
               onClick={() => setActiveQuery(q.id)}
-              className={`p-3 rounded-xl border text-left text-xs font-semibold transition-all ${
+              className={`p-3 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer ${
                 activeQuery === q.id
                   ? "border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
                   : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300"
@@ -105,12 +220,16 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
               <p className="font-semibold text-slate-800 dark:text-slate-200">
                 Stories without linked commits ({queryData?.storiesWithNoCommits?.length || 0}):
               </p>
-              {queryData?.storiesWithNoCommits?.map((s: any) => (
-                <div key={s.id} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between">
-                  <span>[{s.key}] {s.summary}</span>
-                  <span className="text-amber-500 font-bold">{s.status}</span>
-                </div>
-              ))}
+              {queryData?.storiesWithNoCommits?.length === 0 ? (
+                <p className="text-slate-400 italic">No unlinked stories found.</p>
+              ) : (
+                queryData?.storiesWithNoCommits?.map((s: any) => (
+                  <div key={s.id} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between">
+                    <span>[{s.key}] {s.summary}</span>
+                    <span className="text-amber-500 font-bold">{s.status}</span>
+                  </div>
+                ))
+              )}
             </div>
           )}
 
@@ -119,24 +238,32 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
               <p className="font-semibold text-slate-800 dark:text-slate-200">
                 Pull Requests awaiting review ({queryData?.prsWaitingReview?.length || 0}):
               </p>
-              {queryData?.prsWaitingReview?.map((pr: any) => (
-                <div key={pr.id} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between">
-                  <span>PR #{pr.number}: {pr.title}</span>
-                  <span className="text-indigo-500 font-semibold">Author: {pr.author}</span>
-                </div>
-              ))}
+              {queryData?.prsWaitingReview?.length === 0 ? (
+                <p className="text-slate-400 italic">No open PRs awaiting review.</p>
+              ) : (
+                queryData?.prsWaitingReview?.map((pr: any) => (
+                  <div key={pr.id} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between">
+                    <span>PR #{pr.number}: {pr.title}</span>
+                    <span className="text-indigo-500 font-semibold">Author: {pr.author}</span>
+                  </div>
+                ))
+              )}
             </div>
           )}
 
           {activeQuery === "bugModules" && (
             <div className="space-y-1">
               <p className="font-semibold text-slate-800 dark:text-slate-200">Subsystem Module Bug Density:</p>
-              {queryData?.modulesBugDensity?.map((m: any) => (
-                <div key={m.name} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between">
-                  <span>Module: {m.name} (Owner: {m.owner})</span>
-                  <span className="text-red-500 font-bold">Risk Score: {m.riskScore}</span>
-                </div>
-              ))}
+              {queryData?.modulesBugDensity?.length === 0 ? (
+                <p className="text-slate-400 italic">No module bug data registered yet.</p>
+              ) : (
+                queryData?.modulesBugDensity?.map((m: any) => (
+                  <div key={m.name} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex justify-between">
+                    <span>Module: {m.name} (Owner: {m.owner})</span>
+                    <span className="text-red-500 font-bold">Risk Score: {m.riskScore}</span>
+                  </div>
+                ))
+              )}
             </div>
           )}
 
@@ -144,7 +271,7 @@ export default function AIInsightsView({ projectId }: AIInsightsViewProps) {
             <div className="space-y-1">
               <p className="font-semibold text-slate-800 dark:text-slate-200">Sprint Delay Reason:</p>
               <div className="p-3 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <p className="font-bold text-slate-900 dark:text-white">{queryData?.sprintDelayAnalysis?.sprintName || "Sprint 1"}</p>
+                <p className="font-bold text-slate-900 dark:text-white">{queryData?.sprintDelayAnalysis?.sprintName || "Active Sprint"}</p>
                 <p className="text-slate-600 dark:text-slate-400 mt-1">{queryData?.sprintDelayAnalysis?.reason || "Work progressing on schedule."}</p>
               </div>
             </div>

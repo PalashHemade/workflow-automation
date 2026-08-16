@@ -84,6 +84,9 @@ github-tracker/
 │   │   ├── cleaner.ts         # Periodic log pruner
 │   │   ├── eventHelper.ts     # Helpers to create project event timeline nodes
 │   │   └── utils.ts           # Class merging utilities (Tailwind merges)
+├── Dockerfile                 # Multi-stage production build (Node 20 Alpine)
+├── docker-compose.yml         # Full stack: Next.js app + PostgreSQL 16
+├── .dockerignore              # Files excluded from Docker build context
 ├── .env.example               # Secrets template configuration
 ├── tailwind.config.js
 ├── tsconfig.json
@@ -92,31 +95,92 @@ github-tracker/
 
 ---
 
+## Prerequisites
+
+- **Node.js** ≥ 18 and **npm** (for manual setup)
+- **Docker** and **Docker Compose** (for containerized setup)
+- A **GitHub OAuth App** (see [Configure GitHub OAuth App](#2-configure-github-oauth-app) below)
+
+---
+
 ## Setup & Running Guide
 
-### 1. Database Setup
-1. Configure your Postgres connection string in your `.env` file (copied from `.env.example`).
-2. Run Prisma migrations to generate database tables:
+### 1. Create your `.env` file
+
+Copy the example environment template and fill in your own values:
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and replace the placeholder values. At minimum you need:
+- `NEXTAUTH_SECRET` — generate one with `openssl rand -base64 32`
+- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` — from your GitHub OAuth App
+- `GITHUB_WEBHOOK_SECRET` — any strong random string
+
+The Jira and Groq variables are optional and can be left as-is if you don't need those integrations.
+
+### 2. Configure GitHub OAuth App
+
+1. Go to **GitHub Settings → Developer settings → OAuth Apps → New OAuth App**.
+2. Set the **Authorization callback URL** to: `http://localhost:3000/api/auth/callback/github`.
+3. Save the generated `Client ID` and `Client Secret` into your `.env` file.
+
+---
+
+### Option A: Run with Docker (recommended)
+
+This is the fastest way to get everything running. Docker Compose starts both the Next.js app and a PostgreSQL database — no local Postgres installation needed.
+
+```bash
+# Build and start the full stack
+docker compose up --build
+
+# Or run in the background
+docker compose up --build -d
+```
+
+The app will be available at **http://localhost:3000**. Database migrations run automatically on startup.
+
+#### Useful Docker commands
+
+```bash
+# View live logs
+docker compose logs -f app
+
+# Restart after code changes
+docker compose up --build
+
+# Stop all containers
+docker compose down
+
+# Stop and wipe the database volume (fresh start)
+docker compose down -v
+```
+
+> **Note:** The `DATABASE_URL` is automatically overridden inside Docker to use the internal `db` hostname. You don't need to change it in your `.env`.
+
+---
+
+### Option B: Run manually (for development)
+
+Use this approach if you prefer hot-reloading during development.
+
+#### Database Setup
+1. Ensure you have a PostgreSQL instance running locally and that `DATABASE_URL` in `.env` points to it.
+2. Run Prisma migrations to create database tables:
    ```bash
    npx prisma migrate dev --name init
    ```
-3. Generate the Prisma Client typing libraries:
+3. Generate the Prisma Client:
    ```bash
    npx prisma generate
    ```
 
-### 2. Configure GitHub OAuth App
-1. Go to **GitHub Settings -> Developer settings -> OAuth Apps -> New OAuth App**.
-2. Set the callback URL to: `http://localhost:3000/api/auth/callback/github`.
-3. Save the generated `Client ID` and `Client Secret` to your `.env` file.
+#### Start the dev server
+```bash
+npm install
+npm run dev
+```
 
-### 3. Run Locally
-1. Install node dependencies:
-   ```bash
-   npm install
-   ```
-2. Start the hot-reloading development server:
-   ```bash
-   npm run dev
-   ```
-3. Open `http://localhost:3000` in your web browser. Connect your account to begin onboarding and analytics.
+Open **http://localhost:3000** in your browser. Connect your GitHub account to begin onboarding and analytics.

@@ -1,0 +1,47 @@
+# ── Dependencies (rebuilt inside the container) ──────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build artifacts ──────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# ── Environment (injected at runtime via compose) ────────────
+.env
+.env.*
+!.env.example
+
+# ── Version control ──────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Docker files (no recursion) ──────────────────────────────
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# ── IDE / OS ─────────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+
+# ── Validation / test artifacts ──────────────────────────────
+validation/
+validation-results/
+validation-report.md
+validation_metrics.json
+
+# ── Misc ─────────────────────────────────────────────────────
+*.pem
+*.log
+.vercel
+.turbo
+README.md
