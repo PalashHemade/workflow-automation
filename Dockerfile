@@ -42,7 +42,27 @@ RUN ./node_modules/.bin/prisma generate
 RUN npm run build
 
 
-# ── Stage 3: Production runner ───────────────────────────────
+# ── Stage 3: Bundle Prisma CLI with full dependency tree ─────
+# Prisma 6.x CLI has transitive deps (effect, @prisma/config, etc.)
+# that change between versions. Instead of cherry-picking packages
+# (which breaks when Prisma adds new deps), we let npm resolve the
+# full dependency tree automatically.
+FROM node:20-alpine AS prisma-deps
+
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /prisma-cli
+
+# Read the exact installed Prisma version and do a clean install
+COPY --from=deps /app/node_modules/prisma/package.json /tmp/prisma-ref.json
+
+RUN PRISMA_VER=$(node -e "console.log(require('/tmp/prisma-ref.json').version)") && \
+    echo "{\"dependencies\":{\"prisma\":\"${PRISMA_VER}\"}}" > package.json && \
+    npm install && \
+    rm -f /tmp/prisma-ref.json
+
+
+# ── Stage 4: Production runner ───────────────────────────────
 FROM node:20-alpine AS runner
 
 RUN apk add --no-cache libc6-compat openssl
@@ -56,29 +76,23 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# Copy Next.js standalone server
+# 1. Copy Prisma CLI + all transitive deps (creates node_modules base)
+COPY --from=prisma-deps --chown=nextjs:nodejs /prisma-cli/node_modules ./node_modules
+
+# 2. Copy Next.js standalone server (merges its minimal node_modules on top)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 
-# Copy static files
+# 3. Copy static files
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy public files
+# 4. Copy public files
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy Prisma schema
+# 5. Copy Prisma schema (needed for migrate deploy)
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
-# Copy Prisma runtime and generated client
+# 6. Copy Prisma generated client
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-
-# Copy Prisma CLI package
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-
-# Copy ALL Prisma-related files from .bin/ (CLI script + required WASM files like
-# prisma_schema_build_bg.wasm, prisma_fmt_build_bg.wasm, etc.)
-# Prisma 6.x loads these WASM files from the same directory as the CLI at runtime.
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/ ./node_modules/.bin/
 
 # Use the non-root user
 USER nextjs
