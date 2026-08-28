@@ -42,59 +42,50 @@ RUN ./node_modules/.bin/prisma generate
 RUN npm run build
 
 
-# ── Stage 3: Bundle Prisma CLI with full dependency tree ─────
-# Prisma 6.x CLI has transitive deps (effect, @prisma/config, etc.)
-# that change between versions. Instead of cherry-picking packages
-# (which breaks when Prisma adds new deps), we let npm resolve the
-# full dependency tree automatically.
-FROM node:20-alpine AS prisma-deps
-
-RUN apk add --no-cache libc6-compat openssl
-
-WORKDIR /prisma-cli
-
-# Read the exact installed Prisma version and do a clean install
-COPY --from=deps /app/node_modules/prisma/package.json /tmp/prisma-ref.json
-
-RUN PRISMA_VER=$(node -e "console.log(require('/tmp/prisma-ref.json').version)") && \
-    echo "{\"dependencies\":{\"prisma\":\"${PRISMA_VER}\"}}" > package.json && \
-    npm install && \
-    rm -f /tmp/prisma-ref.json
-
-
-# ── Stage 4: Production runner ───────────────────────────────
+# ── Stage 3: Production runner ───────────────────────────────
 FROM node:20-alpine AS runner
 
 RUN apk add --no-cache libc6-compat openssl
 
 WORKDIR /app
 
-ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create a non-root user
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nextjs
 
-# 1. Copy Prisma CLI + all transitive deps (creates node_modules base)
-COPY --from=prisma-deps --chown=nextjs:nodejs /prisma-cli/node_modules ./node_modules
+# Copy Next.js standalone server
+COPY --from=builder /app/.next/standalone ./
 
-# 2. Copy Next.js standalone server (merges its minimal node_modules on top)
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# Copy static files
+COPY --from=builder /app/.next/static ./.next/static
 
-# 3. Copy static files
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Copy public files
+COPY --from=builder /app/public ./public
 
-# 4. Copy public files
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Install Prisma CLI with ALL transitive dependencies directly in the runner.
+# Prisma 6.x has a deep dep tree (effect, @prisma/config, @prisma/engines, etc.)
+# that changes between versions. Running npm install here lets npm resolve the
+# full tree automatically — no fragile cherry-picking.
+COPY --from=deps /app/node_modules/prisma/package.json /tmp/prisma-ref.json
+RUN PRISMA_VER=$(node -e "console.log(require('/tmp/prisma-ref.json').version)") && \
+    npm install --no-save "prisma@${PRISMA_VER}" && \
+    rm -f /tmp/prisma-ref.json && \
+    rm -rf /root/.npm
 
-# 5. Copy Prisma schema (needed for migrate deploy)
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+# Copy Prisma schema (needed for migrate deploy)
+COPY --from=builder /app/prisma ./prisma
 
-# 6. Copy Prisma generated client
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+# Copy Prisma generated client and runtime from the build stage
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# Use the non-root user
+# Fix ownership for the non-root user
+RUN chown -R nextjs:nodejs /app
+
+ENV NODE_ENV=production
+
 USER nextjs
 
 EXPOSE 3000
