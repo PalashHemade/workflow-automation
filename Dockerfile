@@ -72,9 +72,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
-# Copy Prisma CLI so we don't use "npx" and accidentally download Prisma 7
+# Copy Prisma CLI package
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+
+# Copy ALL Prisma-related files from .bin/ (CLI script + required WASM files like
+# prisma_schema_build_bg.wasm, prisma_fmt_build_bg.wasm, etc.)
+# Prisma 6.x loads these WASM files from the same directory as the CLI at runtime.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/ ./node_modules/.bin/
 
 # Use the non-root user
 USER nextjs
