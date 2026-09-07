@@ -1,0 +1,114 @@
+---
+- name: Deploy Workflow Automation DevOps Stack to EC2
+  hosts: web
+  become: yes
+  gather_facts: yes
+  vars:
+    app_dir: "/home/ubuntu/app"
+
+  tasks:
+    - name: Task 1: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Task 2: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - git
+          - rsync
+        state: present
+
+    - name: Task 3: Install Docker Engine and Docker Compose v2 plugin
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+        state: present
+
+    - name: Task 4: Ensure Docker service is enabled and started
+      ansible.builtin.systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Task 5: Add ubuntu user to the docker group
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Task 6: Synchronize project source code to remote app directory
+      ansible.posix.synchronize:
+        src: "../"
+        dest: "{{ app_dir }}"
+        recursive: yes
+        delete: yes
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=terraform"
+          - "--exclude=ansible"
+          - "--exclude=keys"
+          - "--exclude=*.pem"
+          - "--exclude=*.tfstate*"
+          - "--exclude=node_modules"
+
+    - name: Task 7a: Check if remote .env exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/.env"
+      register: env_file_stat
+
+    - name: Task 7b: Copy .env.example to .env if absent
+      ansible.builtin.copy:
+        src: "{{ app_dir }}/.env.example"
+        dest: "{{ app_dir }}/.env"
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+      when: not env_file_stat.stat.exists
+
+    - name: Task 7c: Generate random secret for NEXTAUTH_SECRET
+      ansible.builtin.command: openssl rand -hex 32
+      register: generated_secret
+      when: not env_file_stat.stat.exists
+      changed_when: false
+
+    - name: Task 7d: Inject secure NEXTAUTH_SECRET into .env
+      ansible.builtin.replace:
+        path: "{{ app_dir }}/.env"
+        regexp: '^NEXTAUTH_SECRET=.*$'
+        replace: 'NEXTAUTH_SECRET="{{ generated_secret.stdout }}"'
+        mode: '0600'
+      when: not env_file_stat.stat.exists
+
+    - name: Ensure app directory ownership
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        owner: ubuntu
+        group: ubuntu
+        recurse: yes
+
+    - name: Task 8a: Stop existing container stack if running
+      ansible.builtin.command:
+        cmd: docker compose down --remove-orphans
+        chdir: "{{ app_dir }}"
+      failed_when: false
+
+    - name: Task 8b: Build and launch container stack
+      ansible.builtin.command:
+        cmd: docker compose up -d --build
+        chdir: "{{ app_dir }}"
+
+    - name: Task 9: Poll application endpoint until HTTP 200/302 OK
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:3000"
+        status_code: [200, 302]
+        follow_redirects: none
+      register: app_health_check
+      until: app_health_check.status in [200, 302]
+      retries: 30
+      delay: 5
