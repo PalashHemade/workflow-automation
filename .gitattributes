@@ -1,0 +1,15 @@
+# Force LF for scripts that must run on Linux/WSL/macOS (shebang lines break
+# with CRLF — this bit us: git on Windows silently CRLF'd deploy.sh/destroy.sh
+# with no .gitattributes in place, breaking `./deploy.sh` under WSL/bash).
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.tf text eol=lf
+
+# Windows-native scripts are fine staying CRLF.
+*.ps1 text eol=crlf
+
+# Never touch binary content.
+*.pem binary
+*.zip binary

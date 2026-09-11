@@ -1,0 +1,6 @@
+---
+# Collections required by deploy.yml (ansible.posix.synchronize for Task 6).
+# Installed automatically by deploy.sh / deploy.ps1 — no manual step needed.
+collections:
+  - name: ansible.posix
+    version: ">=1.5.0"

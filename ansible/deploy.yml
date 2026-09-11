@@ -1,0 +1,164 @@
+---
+- name: "Deploy Workflow Automation DevOps Stack to EC2"
+  hosts: web
+  become: yes
+  gather_facts: yes
+  vars:
+    app_dir: "/home/ubuntu/app"
+
+  tasks:
+    - name: "Task 1: Update apt cache"
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: "Task 2: Install prerequisites"
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - git
+          - rsync
+        state: present
+
+    - name: "Task 3: Install Docker Engine and Docker Compose v2 plugin"
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+        state: present
+
+    - name: "Task 4: Ensure Docker service is enabled and started"
+      ansible.builtin.systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: "Task 5: Add ubuntu user to the docker group"
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: "Task 6: Synchronize project source code to remote app directory"
+      ansible.posix.synchronize:
+        # Ansible docs explicitly warn synchronize's local relative paths can
+        # resolve unpredictably (delegate_to/connection-plugin quirks) —
+        # plain "../" was silently syncing the ansible/ folder itself instead
+        # of the project root. playbook_dir is always the absolute directory
+        # containing this file, so this is unambiguous regardless of where
+        # ansible-playbook is invoked from.
+        src: "{{ playbook_dir }}/../"
+        dest: "{{ app_dir }}"
+        recursive: yes
+        delete: yes
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=terraform"
+          - "--exclude=ansible"
+          - "--exclude=keys"
+          - "--exclude=*.pem"
+          - "--exclude=*.tfstate*"
+          - "--exclude=node_modules"
+          # Never ship the deployer's local .env to the server — it's built
+          # fresh below (Tasks 7b-7f) from deploy.env instead, so the box
+          # only ever gets the specific secrets it needs.
+          - "--exclude=.env"
+
+    - name: "Task 7a: Check if remote .env exists"
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/.env"
+      register: env_file_stat
+
+    - name: "Task 7b: Copy .env.example to .env if absent"
+      ansible.builtin.copy:
+        src: "{{ app_dir }}/.env.example"
+        dest: "{{ app_dir }}/.env"
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+      when: not env_file_stat.stat.exists
+
+    - name: "Task 7c: Generate random secret for NEXTAUTH_SECRET"
+      ansible.builtin.command: openssl rand -hex 32
+      register: generated_secret
+      when: not env_file_stat.stat.exists
+      changed_when: false
+
+    - name: "Task 7d: Inject secure NEXTAUTH_SECRET into .env"
+      ansible.builtin.replace:
+        path: "{{ app_dir }}/.env"
+        regexp: '^NEXTAUTH_SECRET=.*$'
+        replace: 'NEXTAUTH_SECRET="{{ generated_secret.stdout }}"'
+        mode: '0600'
+      when: not env_file_stat.stat.exists
+
+    # Application secrets, sourced from the deployer's local deploy.env (never
+    # committed, never rsynced) via environment passthrough — deploy.sh/.ps1
+    # source deploy.env into their own shell before invoking ansible-playbook,
+    # so lookup('env', ...) here sees the same values. no_log hides the actual
+    # secret values from console/CI output.
+    - name: "Task 7e: Inject application secrets into .env"
+      ansible.builtin.replace:
+        path: "{{ app_dir }}/.env"
+        regexp: '^{{ item.key }}=.*$'
+        replace: '{{ item.key }}="{{ item.value }}"'
+      loop:
+        - { key: "GITHUB_CLIENT_ID", value: "{{ lookup('env', 'GITHUB_CLIENT_ID') }}" }
+        - { key: "GITHUB_CLIENT_SECRET", value: "{{ lookup('env', 'GITHUB_CLIENT_SECRET') }}" }
+        - { key: "GITHUB_WEBHOOK_SECRET", value: "{{ lookup('env', 'GITHUB_WEBHOOK_SECRET') }}" }
+        - { key: "DATABASE_URL", value: "{{ lookup('env', 'DATABASE_URL') }}" }
+        - { key: "DIRECT_URL", value: "{{ lookup('env', 'DIRECT_URL') }}" }
+        - { key: "GROQ_API_KEY", value: "{{ lookup('env', 'GROQ_API_KEY') }}" }
+        - { key: "JIRA_CLIENT_ID", value: "{{ lookup('env', 'JIRA_CLIENT_ID') }}" }
+        - { key: "JIRA_CLIENT_SECRET", value: "{{ lookup('env', 'JIRA_CLIENT_SECRET') }}" }
+      loop_control:
+        label: "{{ item.key }}"
+      when:
+        - not env_file_stat.stat.exists
+        - item.value | length > 0
+      no_log: true
+
+    # Point the app at its own stable Elastic IP (see terraform/main.tf) so
+    # the GitHub OAuth callback and webhook registration URL are correct.
+    - name: "Task 7f: Set NEXTAUTH_URL and APP_URL to the instance's public IP"
+      ansible.builtin.replace:
+        path: "{{ app_dir }}/.env"
+        regexp: '^{{ item }}=.*$'
+        replace: '{{ item }}="http://{{ lookup("env", "EC2_IP") }}:3000"'
+      loop:
+        - NEXTAUTH_URL
+        - APP_URL
+      when:
+        - not env_file_stat.stat.exists
+        - lookup('env', 'EC2_IP') | length > 0
+
+    - name: "Ensure app directory ownership"
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        owner: ubuntu
+        group: ubuntu
+        recurse: yes
+
+    - name: "Task 8a: Stop existing container stack if running"
+      ansible.builtin.command:
+        cmd: docker compose down --remove-orphans
+        chdir: "{{ app_dir }}"
+      failed_when: false
+
+    - name: "Task 8b: Build and launch container stack"
+      ansible.builtin.command:
+        cmd: docker compose up -d --build
+        chdir: "{{ app_dir }}"
+
+    - name: "Task 9: Poll application endpoint until HTTP 200/302 OK"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:3000"
+        status_code: [200, 302]
+        follow_redirects: none
+      register: app_health_check
+      until: app_health_check.status in [200, 302]
+      retries: 30
+      delay: 5

@@ -54,3 +54,21 @@ pnpm-lock.yaml
 *.pem
 .vercel
 .turbo
+
+# ── Cloud Credentials & SSH Private Keys ─────────────────────
+*.pem
+keys/*.pem
+*.key
+aws.env
+deploy.env
+
+# ── Terraform State, Cache & Provider Locks ──────────────────
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# ── Environment Files & Local Machine Inventories ────────────
+.env
+ansible/inventory.ini
+
