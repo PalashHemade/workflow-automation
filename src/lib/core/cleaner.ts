@@ -1,4 +1,7 @@
 import { db } from "./db";
+import { createLogger } from "./logger";
+
+const log = createLogger("Cleaner");
 
 /**
  * Prunes successful sync logs older than the retention period (default 30 days)
@@ -19,11 +22,11 @@ export async function pruneLogs(retentionDays = 30) {
     });
 
     if (count > 0) {
-      console.log(`Pruned ${count} successful sync logs older than ${retentionDays} days.`);
+      log.success("Pruned %s successful sync logs older than %s days", count, retentionDays);
     }
     return count;
-  } catch (error) {
-    console.error("Error pruning sync logs:", error);
+  } catch (error: any) {
+    log.error("Error pruning sync logs: %s", error?.message ?? error);
     return 0;
   }
 }

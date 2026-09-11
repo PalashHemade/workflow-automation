@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { db } from "@/lib/db";
-import { createProjectEvent, findPREventId } from "@/lib/eventHelper";
+import { db } from "@/lib/core/db";
+import { createProjectEvent, findPREventId } from "@/lib/events/eventHelper";
 import { EventImportance, EventSource } from "@prisma/client";
-import { EventType } from "@/lib/eventHelper";
+import { EventType } from "@/lib/events/eventHelper";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("Webhook");
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +17,7 @@ function verifySignature(signature: string | null, payload: string): boolean {
     return false;
   }
   if (process.env.NODE_ENV !== "production") {
+    log.warn("Dev bypass — skipping webhook signature verification");
     return true;
   }
   const secret = process.env.GITHUB_WEBHOOK_SECRET || "MySecretWebhookToken123";
@@ -122,8 +126,8 @@ async function syncWebhookCommitFiles(owner: string, name: string, sha: string, 
         }
       });
     }
-  } catch (e) {
-    console.error("Webhook commit file sync error:", e);
+  } catch (e: any) {
+    log.error("Webhook commit file sync error: %s", e?.message ?? e);
   }
 }
 
@@ -155,8 +159,8 @@ async function syncWebhookPRFiles(owner: string, name: string, prNumber: number,
         }
       });
     }
-  } catch (e) {
-    console.error("Webhook PR file sync error:", e);
+  } catch (e: any) {
+    log.error("Webhook PR file sync error: %s", e?.message ?? e);
   }
 }
 
@@ -167,6 +171,7 @@ export async function POST(req: NextRequest) {
 
   // 1. Verify the signature
   if (!verifySignature(signature, rawBody)) {
+    log.error("Rejected webhook delivery — invalid cryptographic signature");
     return NextResponse.json(
       { error: "Invalid cryptographic signature" },
       { status: 401 }
@@ -176,6 +181,7 @@ export async function POST(req: NextRequest) {
   const payload = JSON.parse(rawBody);
   const eventType = event || "unknown";
   const action = payload.action || null;
+  log.info("Received GitHub webhook: %s%s", eventType, action ? ` (${action})` : "");
 
   try {
     // 2. Handle Ping event
@@ -754,7 +760,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ message: `Event '${eventType}' received but no database action required.` });
   } catch (error: any) {
-    console.error("Webhook processing error:", error);
+    log.error("Webhook processing error: %s", error?.message ?? error);
     return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
   }
 }

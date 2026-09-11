@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function calculateProjectMetrics(projectId: string) {
   const project = await db.engineeringProject.findUnique({

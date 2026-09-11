@@ -1,5 +1,5 @@
 import { TestResult, testFetchAuth, assert, assertEqual } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function runSyncSystemTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

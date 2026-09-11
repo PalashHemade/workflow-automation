@@ -74,8 +74,9 @@ RUN PRISMA_VER=$(node -e "console.log(require('/tmp/prisma-ref.json').version)")
     rm -f /tmp/prisma-ref.json && \
     rm -rf /root/.npm
 
-# Copy Prisma schema (needed for migrate deploy)
+# Copy Prisma schema + config (needed for migrate deploy to locate the multi-file schema folder)
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
 # Copy Prisma generated client and runtime from the build stage
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { getAIQueryData } from "@/lib/projectAnalytics";
+import { authOptions } from "@/lib/auth/auth";
+import { db } from "@/lib/core/db";
+import { getAIQueryData } from "@/lib/project/projectAnalytics";
 
 export const dynamic = "force-dynamic";
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAccessibleJiraWorkspaces } from "@/lib/jira";
+import { fetchAccessibleJiraWorkspaces } from "@/lib/jira/jira";
 
 export const dynamic = "force-dynamic";
 

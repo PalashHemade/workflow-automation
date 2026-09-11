@@ -15,7 +15,7 @@ import { signOut } from "next-auth/react";
  * 3. Any other 401 is returned as-is (caller decides what to do).
  *
  * Usage:
- *   import { fetchWithRefresh } from "@/lib/fetchWithRefresh";
+ *   import { fetchWithRefresh } from "@/lib/auth/fetchWithRefresh";
  *   const res = await fetchWithRefresh("/api/repos");
  */
 export async function fetchWithRefresh(

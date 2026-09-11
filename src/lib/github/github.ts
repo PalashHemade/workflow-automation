@@ -1,3 +1,7 @@
+import { createLogger } from "../core/logger";
+
+const log = createLogger("GitHubAPI");
+
 declare global {
   var lastRateLimitRemaining: number | undefined;
   var lastRateLimitReset: Date | undefined;
@@ -42,10 +46,12 @@ export async function fetchGitHub(
     globalThis.lastRateLimitReset = resetTime;
 
     if (remainingVal < 50) {
-      console.warn(
-        `GitHub API Rate limit is low: ${remainingVal} remaining. Resets at ${resetTime.toISOString()}`
-      );
+      log.warn("GitHub API rate limit is low: %s remaining. Resets at %s", remainingVal, resetTime.toISOString());
     }
+  }
+
+  if (response.status === 401) {
+    log.error("GitHub API returned 401 Unauthorized for %s — the access token was rejected", url);
   }
 
   return response;
@@ -76,7 +82,7 @@ export async function fetchGitHubWithRetry(
           const waitTime = globalThis.lastRateLimitReset.getTime() - now.getTime();
           // Only auto-wait if it resets in less than 30 seconds
           if (waitTime < 30000) {
-            console.log(`Rate limit exhausted. Waiting ${waitTime}ms for reset...`);
+            log.info("Rate limit exhausted. Waiting %sms for reset...", waitTime);
             await new Promise((resolve) => setTimeout(resolve, waitTime));
           } else {
             throw new Error(
@@ -96,9 +102,7 @@ export async function fetchGitHubWithRetry(
       // If rate limit (429) or server error (5xx), perform retry with exponential backoff
       if (res.status === 429 || res.status >= 500) {
         const backoffDelay = delay * Math.pow(2, i);
-        console.warn(
-          `Transient GitHub API issue (status ${res.status}) on ${url}. Retrying in ${backoffDelay}ms...`
-        );
+        log.warn("Transient GitHub API issue (status %s) on %s. Retrying in %sms...", res.status, url, backoffDelay);
         await new Promise((resolve) => setTimeout(resolve, backoffDelay));
         continue;
       }
@@ -108,9 +112,7 @@ export async function fetchGitHubWithRetry(
     } catch (err: any) {
       lastError = err;
       const backoffDelay = delay * Math.pow(2, i);
-      console.error(
-        `Fetch attempt ${i + 1} failed for ${url}. Error: ${err.message}. Retrying in ${backoffDelay}ms...`
-      );
+      log.error("Fetch attempt %s failed for %s. Error: %s. Retrying in %sms...", i + 1, url, err.message, backoffDelay);
       await new Promise((resolve) => setTimeout(resolve, backoffDelay));
     }
   }

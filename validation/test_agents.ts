@@ -1,4 +1,4 @@
-import { db } from "../src/lib/db";
+import { db } from "../src/lib/core/db";
 import { SummaryAgent } from "../src/agents/implementations/SummaryAgent";
 import { SprintHealthAgent } from "../src/agents/implementations/SprintHealthAgent";
 import { AgentOrchestrator } from "../src/agents/orchestrator/AgentOrchestrator";

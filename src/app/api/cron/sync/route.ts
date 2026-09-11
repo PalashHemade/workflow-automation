@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runStatelessSyncJob } from "@/lib/scheduler";
+import { runStatelessSyncJob } from "@/lib/github/scheduler";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("CronSync");
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +25,13 @@ async function handler(req: NextRequest) {
       }
     }
 
-    console.log("Stateless sync cron job triggered...");
+    log.info("Stateless sync cron job triggered...");
     const result = await runStatelessSyncJob();
+    log.success("Cron job finished: %s repos synced", result.reposSynced);
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error("Cron job runtime error:", error);
+    log.error("Cron job runtime error: %s", error?.message ?? error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error.message },
       { status: 500 }

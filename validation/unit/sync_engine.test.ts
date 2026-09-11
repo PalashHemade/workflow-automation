@@ -1,6 +1,6 @@
 import { TestResult, TEST_USER_ID, assert, assertEqual } from "../utils";
-import { runIncrementalSync } from "@/lib/syncEngine";
-import { db } from "@/lib/db";
+import { runIncrementalSync } from "@/lib/github/syncEngine";
+import { db } from "@/lib/core/db";
 
 export async function runSyncEngineUnitTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

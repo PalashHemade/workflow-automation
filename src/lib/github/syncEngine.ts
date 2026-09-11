@@ -1,8 +1,12 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { fetchGitHubWithRetry } from "./github";
-import { createProjectEvent, findPREventId, backfillTimelineEvents } from "./eventHelper";
+import { createProjectEvent, findPREventId, backfillTimelineEvents } from "../events/eventHelper";
 import { EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
-import { EventType } from "./eventHelper";
+import { EventType } from "../events/eventHelper";
+import { getValidGithubAccessToken } from "../auth/githubTokenService";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("SyncEngine");
 
 // Bulletproof helper to handle contributor upserts avoiding multiple unique constraint violations
 async function getOrCreateContributor(
@@ -71,7 +75,7 @@ async function syncPRFiles(owner: string, name: string, prNumber: number, prId: 
       accessToken
     );
     if (!res.ok) {
-      console.warn(`Failed to fetch PR files for #${prNumber}. Status: ${res.status}`);
+      log.warn("Failed to fetch PR files for #%s. Status: %s", prNumber, res.status);
       return;
     }
     const files = await res.json();
@@ -94,8 +98,8 @@ async function syncPRFiles(owner: string, name: string, prNumber: number, prId: 
         },
       });
     }
-  } catch (err) {
-    console.error(`Error syncing PR files for #${prNumber}:`, err);
+  } catch (err: any) {
+    log.error("Error syncing PR files for #%s: %s", prNumber, err?.message ?? err);
   }
 }
 
@@ -120,7 +124,7 @@ async function syncPRReviewsAndComments(
       accessToken
     );
     if (!reviewsRes.ok) {
-      console.warn(`Failed to fetch PR reviews for #${prNumber}. Status: ${reviewsRes.status}`);
+      log.warn("Failed to fetch PR reviews for #%s. Status: %s", prNumber, reviewsRes.status);
       return;
     }
     const reviews = await reviewsRes.json();
@@ -204,7 +208,7 @@ async function syncPRReviewsAndComments(
       accessToken
     );
     if (!commentsRes.ok) {
-      console.warn(`Failed to fetch PR review comments for #${prNumber}. Status: ${commentsRes.status}`);
+      log.warn("Failed to fetch PR review comments for #%s. Status: %s", prNumber, commentsRes.status);
       return;
     }
     const comments = await commentsRes.json();
@@ -282,8 +286,8 @@ async function syncPRReviewsAndComments(
         },
       });
     }
-  } catch (err) {
-    console.error(`Error syncing PR reviews/comments for #${prNumber}:`, err);
+  } catch (err: any) {
+    log.error("Error syncing PR reviews/comments for #%s: %s", prNumber, err?.message ?? err);
   }
 }
 
@@ -302,7 +306,7 @@ async function syncBranches(
       accessToken
     );
     if (!res.ok) {
-      console.warn(`Failed to fetch branches. Status: ${res.status}`);
+      log.warn("Failed to fetch branches. Status: %s", res.status);
       return;
     }
     const branches = await res.json();
@@ -368,8 +372,8 @@ async function syncBranches(
         });
       }
     }
-  } catch (err) {
-    console.error("Error syncing branches:", err);
+  } catch (err: any) {
+    log.error("Error syncing branches: %s", err?.message ?? err);
   }
 }
 
@@ -399,10 +403,12 @@ export async function runIncrementalSync(
     throw new Error(`Repository with ID ${repositoryId} not found.`);
   }
 
-  // Find OAuth token
-  const githubAccount = repository.user.accounts.find((acc) => acc.provider === "github");
-  const accessToken = githubAccount?.access_token;
-  if (!accessToken) {
+  // Get a valid (auto-refreshed if needed) OAuth token
+  let accessToken: string;
+  try {
+    accessToken = await getValidGithubAccessToken(repository.userId);
+  } catch (err: any) {
+    log.error("No usable GitHub token for user %s (repo %s): %s", repository.userId, repositoryId, err?.message ?? err);
     throw new Error(`GitHub access token not found for user ${repository.userId}.`);
   }
 
@@ -464,7 +470,7 @@ export async function runIncrementalSync(
       );
 
       if (!res.ok) {
-        console.warn(`Commits page ${page} returned status ${res.status}. Stopping commits fetch.`);
+        log.warn("Commits page %s returned status %s. Stopping commits fetch.", page, res.status);
         break;
       }
 
@@ -566,7 +572,7 @@ export async function runIncrementalSync(
       );
 
       if (!res.ok) {
-        console.warn(`PRs page ${page} returned status ${res.status}. Stopping PRs fetch.`);
+        log.warn("PRs page %s returned status %s. Stopping PRs fetch.", page, res.status);
         break;
       }
 
@@ -798,11 +804,12 @@ export async function runIncrementalSync(
       },
     });
 
+    log.success("Synced repo %s: %s commits, %s PRs", repositoryId, commitsSynced, prsSynced);
     return { commitsSynced, prsSynced };
   } catch (error: any) {
     const endTime = new Date();
     const durationMs = endTime.getTime() - startTime.getTime();
-    console.error(`Error in runIncrementalSync for repo ${repositoryId}:`, error);
+    log.error("Error in runIncrementalSync for repo %s: %s", repositoryId, error?.message ?? error);
 
     // Compute exponential backoff for next sync
     const syncFailureCount = repository.syncFailureCount + 1;

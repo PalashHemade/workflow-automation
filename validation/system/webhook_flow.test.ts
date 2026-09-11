@@ -1,5 +1,5 @@
 import { TestResult, TEST_USER_ID, testFetch, assert, assertEqual } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import * as crypto from "crypto";
 import { EventEntityType } from "@prisma/client";
 

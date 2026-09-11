@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { ProjectEvent, EventEntityType, EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
 
 export interface LogEventData {

@@ -1,5 +1,5 @@
 import { TestResult, TEST_USER_ID, testFetchAuth, assertEqual } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function runAuthorizationSecurityTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

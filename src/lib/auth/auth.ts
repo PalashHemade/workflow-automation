@@ -1,9 +1,13 @@
 import { NextAuthOptions } from "next-auth";
 import GithubProvider from "next-auth/providers/github";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { db } from "@/lib/db";
-import { issueTokenPair, revokeUserTokens } from "@/lib/tokenService";
+import { db } from "@/lib/core/db";
+import { issueTokenPair, revokeUserTokens } from "@/lib/auth/tokenService";
+import { getValidGithubAccessToken } from "@/lib/auth/githubTokenService";
+import { createLogger } from "@/lib/core/logger";
 import { cookies } from "next/headers";
+
+const log = createLogger("Auth");
 
 // ─── Cookie helpers ───────────────────────────────────────────────────────────
 
@@ -80,8 +84,9 @@ export const authOptions: NextAuthOptions = {
               scope: account.scope ?? null,
             },
           });
-        } catch (err) {
-          console.error("[auth] Failed to persist GitHub access_token:", err);
+          log.success("Persisted GitHub access_token for user %s on sign-in", user.id);
+        } catch (err: any) {
+          log.error("Failed to persist GitHub access_token for user %s: %s", user.id, err?.message ?? err);
         }
       }
       return true;
@@ -98,8 +103,9 @@ export const authOptions: NextAuthOptions = {
         const { accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt } =
           await issueTokenPair(user.id);
         setTokenCookies(accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt);
-      } catch (err) {
-        console.error("[auth] Failed to issue token pair on signIn:", err);
+        log.success("Issued app session token pair for user %s", user.id);
+      } catch (err: any) {
+        log.error("Failed to issue token pair on signIn for user %s: %s", user.id, err?.message ?? err);
       }
     },
 
@@ -118,8 +124,8 @@ export const authOptions: NextAuthOptions = {
       // 1. Revoke custom tokens
       try {
         await revokeUserTokens(userId);
-      } catch (err) {
-        console.error("[auth] Failed to revoke user tokens on signOut:", err);
+      } catch (err: any) {
+        log.error("Failed to revoke user tokens on signOut for user %s: %s", userId, err?.message ?? err);
       }
 
       // 2. Revoke the GitHub OAuth access token so GitHub requires re-auth
@@ -148,9 +154,10 @@ export const authOptions: NextAuthOptions = {
           // Note: do NOT null the access_token here — the PrismaAdapter's updateAccount
           // on the next sign-in does not reliably overwrite a null, causing the repo
           // list to appear empty. The GitHub-side revocation above is sufficient.
+          log.success("Revoked GitHub OAuth token on signOut for user %s", userId);
         }
-      } catch (err) {
-        console.error("[auth] Failed to revoke GitHub OAuth token on signOut:", err);
+      } catch (err: any) {
+        log.error("Failed to revoke GitHub OAuth token on signOut for user %s: %s", userId, err?.message ?? err);
       }
 
       // 3. Clear httpOnly cookies
@@ -190,35 +197,35 @@ export async function getUserGithubLogin(userId: string): Promise<string | null>
   }
 
   // 2. Fetch directly from GitHub API and cache it
-  if (account.access_token) {
-    try {
-      const response = await fetch("https://api.github.com/user", {
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${account.access_token}`,
-          "User-Agent": "github-analytics-dashboard",
+  try {
+    const accessToken = await getValidGithubAccessToken(userId);
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": "github-analytics-dashboard",
+      },
+      cache: "no-store",
+    });
+    if (response.ok) {
+      const profile = await response.json();
+
+      await db.contributor.upsert({
+        where: { login: profile.login },
+        update: { githubId },
+        create: {
+          login: profile.login,
+          githubId,
+          avatarUrl: profile.avatar_url,
+          name: profile.name,
+          email: profile.email,
         },
-        cache: "no-store",
       });
-      if (response.ok) {
-        const profile = await response.json();
-        
-        await db.contributor.upsert({
-          where: { login: profile.login },
-          update: { githubId },
-          create: {
-            login: profile.login,
-            githubId,
-            avatarUrl: profile.avatar_url,
-            name: profile.name,
-            email: profile.email,
-          },
-        });
-        return profile.login;
-      }
-    } catch (err) {
-      console.error("Error fetching github user profile:", err);
+      return profile.login;
     }
+    log.warn("GitHub /user lookup returned %s for user %s", response.status, userId);
+  } catch (err: any) {
+    log.error("Error fetching GitHub user profile for user %s: %s", userId, err?.message ?? err);
   }
 
   return null;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { calculateProjectMetrics } from "@/lib/projectAnalytics";
+import { authOptions } from "@/lib/auth/auth";
+import { calculateProjectMetrics } from "@/lib/project/projectAnalytics";
 
 export const dynamic = "force-dynamic";
 

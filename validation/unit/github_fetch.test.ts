@@ -1,5 +1,5 @@
 import { TestResult, assertEqual, assertThrows } from "../utils";
-import { fetchGitHubWithRetry } from "@/lib/github";
+import { fetchGitHubWithRetry } from "@/lib/github/github";
 
 export async function runGithubFetchUnitTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

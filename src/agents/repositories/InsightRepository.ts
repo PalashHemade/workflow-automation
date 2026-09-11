@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { AIInsight, InsightType, InsightSeverity, InsightStatus } from "@prisma/client";
 
 export interface CreateInsightData {

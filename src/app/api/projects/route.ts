@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { listEngineeringProjects, createEngineeringProject } from "@/lib/projectService";
+import { authOptions } from "@/lib/auth/auth";
+import { listEngineeringProjects, createEngineeringProject } from "@/lib/project/projectService";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("Projects");
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +71,7 @@ export async function POST(req: Request) {
 
     return safeJsonResponse({ project }, 201);
   } catch (error: any) {
-    console.error("Error creating engineering project:", error);
+    log.error("Error creating engineering project: %s", error?.message ?? error);
     return NextResponse.json({ error: error.message || "Failed to create project" }, { status: 500 });
   }
 }

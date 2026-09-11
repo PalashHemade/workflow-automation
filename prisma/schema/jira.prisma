@@ -1,0 +1,105 @@
+// Jira Workspace Credential Entity
+model JiraWorkspace {
+  id           String    @id @default(cuid())
+  cloudId      String    @unique
+  name         String
+  baseUrl      String
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Sprint {
+  id        String             @id @default(cuid())
+  jiraId    String             @unique
+  name      String
+  state     SprintState
+  startDate DateTime?
+  endDate   DateTime?
+  projectId String
+  project   EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stories   Story[]
+}
+
+model Epic {
+  id        String             @id @default(cuid())
+  jiraId    String             @unique
+  key       String
+  summary   String
+  status    String
+  projectId String
+  project   EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stories   Story[]
+}
+
+model Story {
+  id                String             @id @default(cuid())
+  jiraId            String             @unique
+  key               String
+  summary           String
+  description       String?
+  priority          String?
+  status            String
+  assigneeId        String?
+  sprintId          String?
+  epicId            String?
+  projectId         String
+  tasks             JiraTask[]
+  epic              Epic?              @relation(fields: [epicId], references: [id])
+  project           EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint            Sprint?            @relation(fields: [sprintId], references: [id])
+  storyCommits      StoryCommit[]
+  storyPullRequests StoryPullRequest[]
+}
+
+// Junction Table for Story and Commit Correlation (Many-to-Many)
+model StoryCommit {
+  id         String            @id @default(cuid())
+  storyId    String
+  commitId   String
+  confidence Float             @default(100.0)
+  matchedBy  CorrelationMethod @default(COMMIT)
+  reason     String?
+  createdAt  DateTime          @default(now())
+  commit     Commit            @relation(fields: [commitId], references: [id], onDelete: Cascade)
+  story      Story             @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, commitId])
+  @@index([storyId])
+  @@index([commitId])
+}
+
+// Junction Table for Story and Pull Request Correlation (Many-to-Many)
+model StoryPullRequest {
+  id            String            @id @default(cuid())
+  storyId       String
+  pullRequestId String
+  confidence    Float             @default(100.0)
+  matchedBy     CorrelationMethod @default(PR_TITLE)
+  reason        String?
+  createdAt     DateTime          @default(now())
+  pullRequest   PullRequest       @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  story         Story             @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, pullRequestId])
+  @@index([storyId])
+  @@index([pullRequestId])
+}
+
+// Jira Task / Bug Entity
+model JiraTask {
+  id        String             @id @default(cuid())
+  jiraId    String             @unique
+  key       String
+  summary   String
+  issueType String
+  status    String
+  priority  String?
+  assignee  String?
+  storyId   String?
+  projectId String
+  project   EngineeringProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  story     Story?             @relation(fields: [storyId], references: [id])
+}

@@ -1,0 +1,191 @@
+// Engineering Project (Aggregate Root Entity)
+model EngineeringProject {
+  id              String               @id @default(cuid())
+  name            String
+  description     String?
+  ownerId         String
+  repositoryId    String               @unique
+  primaryBranch   String               @default("main")
+  defaultBranch   String               @default("main")
+  archived        Boolean              @default(false)
+  syncStatus      SyncStatus           @default(IDLE)
+  lastSyncAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  aiInsights      AIInsight[]
+  owner           User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  repository      Repository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  epics           Epic[]
+  tasks           JiraTask[]
+  moduleKnowledge ModuleKnowledge[]
+  pipelineRuns    PipelineRun[]
+  projectEvents   ProjectEvent[]
+  integrations    ProjectIntegration[]
+  knowledge       ProjectKnowledge?
+  members         ProjectMember[]
+  metrics         ProjectMetrics?
+  sprints         Sprint[]
+  stories         Story[]
+  syncJobs        SyncJob[]
+}
+
+// Project Provider Integration Config & Sync State
+model ProjectIntegration {
+  id                   String              @id @default(cuid())
+  provider             IntegrationProvider
+  status               IntegrationStatus   @default(CONNECTED)
+  config               Json?
+  lastSyncAt           DateTime?
+  lastSuccessfulSync   DateTime?
+  lastFailure          DateTime?
+  lastError            String?
+  engineeringProjectId String
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  credentials          OAuthCredential[]
+  pipelineRuns         PipelineRun[]
+  engineeringProject   EngineeringProject  @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+  syncJobs             SyncJob[]
+
+  @@unique([engineeringProjectId, provider])
+}
+
+// Dedicated OAuth Credentials for Integrations
+model OAuthCredential {
+  id            String              @id @default(cuid())
+  provider      IntegrationProvider
+  accessToken   String
+  refreshToken  String?
+  expiresAt     DateTime?
+  accountId     String?
+  accountName   String?
+  integrationId String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  integration   ProjectIntegration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+}
+
+// Project Team Member Access and Mapping
+model ProjectMember {
+  id                   String             @id @default(cuid())
+  role                 String             @default("MEMBER")
+  githubUsername       String?
+  jiraAccountId        String?
+  permissions          Json?
+  engineeringProjectId String
+  userId               String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+  user                 User?              @relation(fields: [userId], references: [id])
+}
+
+// CI/CD Pipeline Run Entity
+model PipelineRun {
+  id                   String             @id @default(cuid())
+  integrationId        String
+  pipelineId           String
+  pipelineName         String
+  runNumber            Int
+  branch               String?
+  commitSha            String?
+  status               PipelineStatus     @default(IN_PROGRESS)
+  triggeredBy          String?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  durationMs           Int?
+  logsUrl              String?
+  artifactsUrl         String?
+  engineeringProjectId String
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+  integration          ProjectIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+}
+
+// operational Sync Job Tracker
+model SyncJob {
+  id                   String              @id @default(cuid())
+  integrationId        String?
+  provider             IntegrationProvider
+  startedAt            DateTime            @default(now())
+  finishedAt           DateTime?
+  status               SyncStatus          @default(SYNCING)
+  itemsProcessed       Int                 @default(0)
+  errors               Json?
+  durationMs           Int                 @default(0)
+  engineeringProjectId String
+  engineeringProject   EngineeringProject  @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+  integration          ProjectIntegration? @relation(fields: [integrationId], references: [id])
+
+  @@index([engineeringProjectId])
+}
+
+// Subsystem / Module Architectural Knowledge
+model ModuleKnowledge {
+  id                   String             @id @default(cuid())
+  name                 String
+  owner                String?
+  dependencies         Json?
+  dependents           Json?
+  healthScore          Float              @default(100.0)
+  riskScore            Float              @default(0.0)
+  complexityScore      Float?             @default(1.0)
+  coverage             Float?             @default(80.0)
+  lastModified         DateTime?          @default(now())
+  engineeringProjectId String
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+}
+
+// Engineering Memory & Knowledge Base
+model ProjectKnowledge {
+  id                   String             @id @default(cuid())
+  projectSummary       String?
+  architectureSummary  String?
+  riskSummary          String?
+  releaseSummary       String?
+  engineeringMemory    String?
+  engineeringProjectId String             @unique
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+}
+
+// Managed AI Alert & Recommendation Item
+model AIInsight {
+  id                   String             @id @default(cuid())
+  title                String
+  summary              String
+  type                 InsightType        @default(SUMMARY)
+  severity             InsightSeverity    @default(MEDIUM)
+  status               InsightStatus      @default(ACTIVE)
+  confidence           Float              @default(90.0)
+  resolved             Boolean            @default(false)
+  createdBy            String             @default("AI_AGENT")
+  expiresAt            DateTime?
+  metadata             Json?
+  engineeringProjectId String
+  createdAt            DateTime           @default(now())
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+}
+
+// Pre-aggregated Dashboard Metrics (including DORA Metrics)
+model ProjectMetrics {
+  id                    String             @id @default(cuid())
+  engineeringProjectId  String             @unique
+  sprintVelocity        Float              @default(0)
+  leadTime              Float              @default(0)
+  cycleTime             Float              @default(0)
+  deploymentFrequency   Float              @default(0)
+  meanReviewTime        Float              @default(0)
+  bugRate               Float              @default(0)
+  riskScore             Float              @default(0)
+  changeFailureRate     Float              @default(0)
+  mttr                  Float              @default(0)
+  deploymentSuccessRate Float              @default(100.0)
+  openRiskCount         Int                @default(0)
+  calculatedAt          DateTime           @default(now())
+  engineeringProject    EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+}

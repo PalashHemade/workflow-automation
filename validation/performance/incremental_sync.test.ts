@@ -1,5 +1,5 @@
 import { TestResult, testFetchAuth, assert } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function runIncrementalSyncPerformanceTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

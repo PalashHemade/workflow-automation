@@ -1,6 +1,6 @@
 import { TestResult, TEST_USER_ID, TEST_ACCOUNT_ID, assert, assertEqual } from "../utils";
-import { getUserGithubLogin, checkRepositoryAccess } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { getUserGithubLogin, checkRepositoryAccess } from "@/lib/auth/auth";
+import { db } from "@/lib/core/db";
 
 export async function runAuthUnitTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

@@ -1,6 +1,6 @@
 import { TestResult, assert, assertEqual, TEST_USER_ID } from "../utils";
-import { db } from "@/lib/db";
-import { syncJiraProject } from "@/lib/jiraSync";
+import { db } from "@/lib/core/db";
+import { syncJiraProject } from "@/lib/jira/jiraSync";
 
 export async function runJiraSyncUnitTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

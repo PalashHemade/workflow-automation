@@ -1,5 +1,8 @@
-import { db } from "./db";
+import { db } from "../core/db";
 import { EventEntityType, EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("EventHelper");
 
 export const EventType = {
   COMMIT_CREATED: "COMMIT",
@@ -89,8 +92,8 @@ export async function createProjectEvent(input: ProjectEventInput) {
         timestamp: input.createdAt || new Date(),
       },
     });
-  } catch (err) {
-    console.error("Error creating project event:", err);
+  } catch (err: any) {
+    log.error("Error creating project event: %s", err?.message ?? err);
     return null;
   }
 }

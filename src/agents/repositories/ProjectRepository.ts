@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { EngineeringProject, ProjectKnowledge, ModuleKnowledge } from "@prisma/client";
 
 export class ProjectRepository {

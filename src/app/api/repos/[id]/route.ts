@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { getServerSession } from "next-auth";
-import { authOptions, checkRepositoryAccess } from "@/lib/auth";
-import { fetchGitHub } from "@/lib/github";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth/auth";
+import { fetchGitHub } from "@/lib/github/github";
+import { getValidGithubAccessToken } from "@/lib/auth/githubTokenService";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("RepoSettings");
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +21,7 @@ async function deleteGitHubWebhook(
   accessToken: string
 ) {
   try {
-    console.log(`Attempting to delete GitHub webhook ${githubWebhookId} for ${owner}/${name}...`);
+    log.info("Attempting to delete GitHub webhook %s for %s/%s...", githubWebhookId, owner, name);
     const response = await fetchGitHub(
       `https://api.github.com/repos/${owner}/${name}/hooks/${githubWebhookId}`,
       accessToken,
@@ -25,10 +29,10 @@ async function deleteGitHubWebhook(
     );
 
     if (response.ok || response.status === 404) {
-      console.log(`GitHub webhook ${githubWebhookId} deleted successfully (or already deleted).`);
+      log.success("GitHub webhook %s deleted (or already deleted)", githubWebhookId);
     } else {
       const errText = await response.text();
-      console.warn(`Failed to delete webhook from GitHub: ${errText}`);
+      log.warn("Failed to delete webhook from GitHub: %s", errText);
     }
 
     // Inactivate in our DB in either case
@@ -46,8 +50,8 @@ async function deleteGitHubWebhook(
         webhookEnabled: false,
       },
     });
-  } catch (err) {
-    console.error(`Error deleting webhook from GitHub:`, err);
+  } catch (err: any) {
+    log.error("Error deleting webhook from GitHub: %s", err?.message ?? err);
   }
 }
 
@@ -72,8 +76,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
 
-    const githubAccount = repository.user.accounts.find((acc: any) => acc.provider === "github");
-    const accessToken = githubAccount?.access_token || "";
+    let accessToken = "";
+    try {
+      accessToken = await getValidGithubAccessToken(repository.userId);
+    } catch (err: any) {
+      log.warn("No usable GitHub token for user %s while updating repo %s: %s", repository.userId, repositoryId, err?.message ?? err);
+    }
 
     const updateData: any = {};
     if (displayName !== undefined) updateData.displayName = displayName;
@@ -116,7 +124,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       },
     });
   } catch (error: any) {
-    console.error("PATCH repo settings error:", error);
+    log.error("PATCH repo settings error: %s", error?.message ?? error);
     return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
   }
 }
@@ -140,8 +148,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
 
-    const githubAccount = repository.user.accounts.find((acc: any) => acc.provider === "github");
-    const accessToken = githubAccount?.access_token || "";
+    let accessToken = "";
+    try {
+      accessToken = await getValidGithubAccessToken(repository.userId);
+    } catch (err: any) {
+      log.warn("No usable GitHub token for user %s while deleting repo %s: %s", repository.userId, repositoryId, err?.message ?? err);
+    }
 
     const currentUserId = session.user.id;
     const trackers = repository.trackingUserIds
@@ -215,7 +227,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       message: "Repository and all associated database records deleted successfully.",
     });
   } catch (error: any) {
-    console.error("DELETE repo error:", error);
+    log.error("DELETE repo error: %s", error?.message ?? error);
     return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
   }
 }
