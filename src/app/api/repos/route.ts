@@ -37,14 +37,17 @@ export async function GET(req: NextRequest) {
     });
 
     let githubRepos: any[] = [];
-    if (userAccount?.access_token) {
+    let githubError: string | null = null;
+    const hasToken = !!userAccount?.access_token;
+
+    if (hasToken) {
       try {
         const ghResponse = await fetch(
-          "https://api.github.com/user/repos?per_page=50&sort=updated",
+          "https://api.github.com/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&per_page=100&sort=updated",
           {
             headers: {
               Accept: "application/vnd.github+json",
-              Authorization: `Bearer ${userAccount.access_token}`,
+              Authorization: `Bearer ${userAccount!.access_token}`,
               "User-Agent": "github-analytics-dashboard",
             },
             cache: "no-store",
@@ -52,10 +55,19 @@ export async function GET(req: NextRequest) {
         );
         if (ghResponse.ok) {
           githubRepos = await ghResponse.json();
+        } else {
+          const errText = await ghResponse.text();
+          githubError = `GitHub API ${ghResponse.status}: ${errText}`;
+          console.error("GitHub API error fetching repos:", githubError);
         }
-      } catch (err) {
+      } catch (err: any) {
+        githubError = err?.message ?? "Network error calling GitHub API";
         console.error("Error fetching repos from GitHub API:", err);
       }
+    } else {
+      githubError = userAccount
+        ? "GitHub account found but access_token is null — please sign out and sign back in"
+        : "No GitHub account linked to this user in the database";
     }
 
     const serializedDbRepos = dbRepos.map((repo) => ({
@@ -78,6 +90,8 @@ export async function GET(req: NextRequest) {
         fullName: r.full_name,
         htmlUrl: r.html_url,
       })),
+      // Diagnostic fields — shown in UI if githubRepos is empty
+      _debug: { hasToken, githubError, userId },
     });
   } catch (error: any) {
     console.error("Fetch repos error:", error);

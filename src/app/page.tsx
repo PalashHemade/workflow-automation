@@ -18,10 +18,11 @@ export default async function Home() {
 
   // Render premium OAuth landing page if unauthenticated
   return (
-    <div className="relative min-h-screen bg-slate-50 dark:bg-[#020617] overflow-hidden flex flex-col justify-between transition-colors duration-300">
+    <div className="relative min-h-screen bg-slate-50 dark:bg-[#020617] overflow-hidden flex flex-col justify-between transition-colors duration-500">
       {/* Background Decorative Glows */}
-      <div className="absolute top-[-10%] left-[-10%] h-[600px] w-[600px] rounded-full bg-indigo-500/5 dark:bg-indigo-950/15 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-violet-500/5 dark:bg-violet-950/15 blur-[120px] pointer-events-none" />
+      <div className="absolute top-[-20%] left-[-10%] h-[700px] w-[700px] rounded-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 blur-[120px] pointer-events-none animate-pulse duration-10000" />
+      <div className="absolute bottom-[-20%] right-[-10%] h-[700px] w-[700px] rounded-full bg-gradient-to-l from-violet-500/20 to-fuchsia-500/20 blur-[120px] pointer-events-none animate-pulse duration-10000" />
+      <div className="absolute top-[40%] left-[50%] -translate-x-1/2 -translate-y-1/2 h-[500px] w-[800px] rounded-full bg-indigo-500/10 dark:bg-indigo-900/20 blur-[150px] pointer-events-none" />
 
       {/* Header bar */}
       <header className="border-b border-slate-200 dark:border-slate-900 bg-white/45 dark:bg-slate-950/45 backdrop-blur-md transition-colors duration-300">
@@ -53,15 +54,15 @@ export default async function Home() {
             <span>Introducing Real-Time Repository Audits</span>
           </div>
 
-          <div className="space-y-4">
-            <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">
-              Real-Time GitHub <br />
-              <span className="bg-gradient-to-r from-indigo-600 via-purple-500 to-indigo-600 dark:from-indigo-400 dark:via-purple-300 dark:to-indigo-400 bg-clip-text text-transparent">
-                Repository Analytics
+          <div className="space-y-6 relative z-10">
+            <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.1]">
+              Engineering Intelligence <br />
+              <span className="bg-gradient-to-r from-indigo-600 via-fuchsia-500 to-indigo-600 dark:from-indigo-400 dark:via-fuchsia-300 dark:to-indigo-400 bg-clip-text text-transparent animate-gradient-x">
+                Delivered in Real-Time
               </span>
             </h1>
-            <p className="text-base text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
-              Track commit frequencies, analyze pull request review cycles, map contributor leaderboards, and process updates instantly via verified cryptographic webhooks.
+            <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+              Elevate your development workflow. Track commit frequencies, analyze pull request review cycles, and map contributor leaderboards instantly using our secure GitHub integration.
             </p>
           </div>
 
@@ -75,23 +76,23 @@ export default async function Home() {
           </div>
 
           {/* Cards for Features */}
-          <div className="grid gap-4 sm:grid-cols-3 pt-10 text-left">
-            <div className="rounded-xl border border-slate-200 dark:border-slate-900 bg-white/50 dark:bg-slate-950/30 p-5 space-y-2 transition-colors duration-300">
-              <div className="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-sm font-bold">1</div>
-              <h3 className="font-semibold text-slate-800 dark:text-white text-sm">Instant REST Sync</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-500">Auto-populates historical data for the last 100 commits and pull request cycles upon tracking.</p>
+          <div className="grid gap-6 sm:grid-cols-3 pt-12 text-left relative z-10">
+            <div className="rounded-2xl border border-slate-200/50 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl p-6 space-y-3 shadow-xl shadow-slate-200/20 dark:shadow-none hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-lg font-black shadow-inner">1</div>
+              <h3 className="font-bold text-slate-800 dark:text-white text-base">Instant Sync</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Auto-populates historical data for the last 100 commits and pull request cycles instantly upon tracking.</p>
             </div>
-            <div className="rounded-xl border border-slate-200 dark:border-slate-900 bg-white/50 dark:bg-slate-950/30 p-5 space-y-2 transition-colors duration-300">
-              <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400 text-sm font-bold">2</div>
-              <h3 className="font-semibold text-slate-800 dark:text-white text-sm">Webhook Updates</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-500">Instantly update statistics using cryptographically signed GitHub webhooks on push and PR triggers.</p>
+            <div className="rounded-2xl border border-slate-200/50 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl p-6 space-y-3 shadow-xl shadow-slate-200/20 dark:shadow-none hover:shadow-purple-500/10 hover:-translate-y-1 transition-all duration-300">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-fuchsia-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400 text-lg font-black shadow-inner">2</div>
+              <h3 className="font-bold text-slate-800 dark:text-white text-base">Live Webhooks</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Instantly process updates and metric recalculations using cryptographically signed GitHub webhooks.</p>
             </div>
-            <div className="rounded-xl border border-slate-200 dark:border-slate-900 bg-white/50 dark:bg-slate-950/30 p-5 space-y-2 transition-colors duration-300">
-              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-sm font-bold">
-                <Cpu className="h-4.5 w-4.5" />
+            <div className="rounded-2xl border border-slate-200/50 dark:border-slate-800/50 bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl p-6 space-y-3 shadow-xl shadow-slate-200/20 dark:shadow-none hover:shadow-emerald-500/10 hover:-translate-y-1 transition-all duration-300">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-inner">
+                <Cpu className="h-5 w-5" />
               </div>
-              <h3 className="font-semibold text-slate-800 dark:text-white text-sm">Flexible Polling</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-500">Track third-party creator repositories with automated fallback background polling sync.</p>
+              <h3 className="font-bold text-slate-800 dark:text-white text-base">AI Analytics</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Generate actionable summaries and identify code anti-patterns automatically with AI-powered insights.</p>
             </div>
           </div>
         </div>

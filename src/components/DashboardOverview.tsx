@@ -37,9 +37,10 @@ import {
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 
 export default function DashboardOverview() {
+  const { data: session } = useSession();
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
@@ -189,9 +190,27 @@ export default function DashboardOverview() {
               </button>
             )}
             <ThemeToggle />
+            
+            {/* User Profile */}
+            {session?.user && (
+              <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm ml-2">
+                <div className="flex flex-col items-end">
+                  <span className="text-sm font-bold leading-none text-slate-900 dark:text-white">{session.user.name}</span>
+                  <span className="text-xs text-slate-500 mt-1">{session.user.email}</span>
+                </div>
+                {session.user.image ? (
+                  <img src={session.user.image} alt={session.user.name || "User"} className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">
+                    {session.user.name?.charAt(0) || "U"}
+                  </div>
+                )}
+              </div>
+            )}
+            
             <button
-              onClick={() => signOut()}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="p-2 ml-2 rounded-xl text-slate-400 hover:text-red-500 dark:hover:text-red-400 bg-slate-100 hover:bg-red-50 dark:bg-slate-900 dark:hover:bg-red-950/30 transition-colors shadow-sm"
               title="Sign Out"
             >
               <LogOut className="h-4 w-4" />

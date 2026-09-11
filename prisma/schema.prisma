@@ -47,6 +47,7 @@ model User {
   repositories        Repository[]
   engineeringProjects EngineeringProject[]
   projectMemberships  ProjectMember[]
+  userToken           UserToken?
 }
 
 model VerificationToken {
@@ -56,6 +57,29 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+/**
+ * Custom short-lived access + rotating refresh token pair.
+ * One active pair per user at a time (userId is unique).
+ * - accessToken:  15-minute lifetime, HMAC-signed with NEXTAUTH_SECRET
+ * - refreshToken: 7-day lifetime, HMAC-signed with REFRESH_TOKEN_SECRET
+ * On every refresh, the old row is deleted and a new one is inserted.
+ * On sign-out, the row is deleted and the GitHub OAuth token is revoked.
+ */
+model UserToken {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String   @unique @db.Text
+  refreshToken          String   @unique @db.Text
+  accessTokenExpiresAt  DateTime
+  refreshTokenExpiresAt DateTime
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([accessToken])
+  @@index([refreshToken])
 }
 
 // Domain Enums for Phase 5
