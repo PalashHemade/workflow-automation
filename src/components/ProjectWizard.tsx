@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Sparkles, GitBranch, Layers, CheckCircle2, ArrowRight, ArrowLeft, Loader2, Link2, Shield, AlertCircle } from "lucide-react";
+import { Sparkles, GitBranch, Layers, CheckCircle2, ArrowRight, ArrowLeft, Loader2, Link2, Shield, AlertCircle, Search } from "lucide-react";
 
 interface ProjectWizardProps {
   onSuccess: (project: any) => void;
@@ -16,13 +16,19 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
   const [description, setDescription] = useState("");
 
   // Step 2: GitHub Repo
-  const [repoMode, setRepoMode] = useState<"select" | "create">("select");
+  const [repoMode, setRepoMode] = useState<"pick" | "create">("pick");
   const [dbRepos, setDbRepos] = useState<any[]>([]);
   const [githubRepos, setGithubRepos] = useState<any[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string>("");
+  const [selectedRepoLabel, setSelectedRepoLabel] = useState<string>("");
+  const [repoSearch, setRepoSearch] = useState("");
+  const [registeringRepoId, setRegisteringRepoId] = useState<number | null>(null);
+
+  // Create New Repo
   const [newRepoName, setNewRepoName] = useState("");
   const [newRepoDesc, setNewRepoDesc] = useState("");
   const [newRepoPrivate, setNewRepoPrivate] = useState(false);
+
   const [creatingRepo, setCreatingRepo] = useState(false);
   const [loadingRepos, setLoadingRepos] = useState(false);
 
@@ -82,6 +88,39 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
     }
   };
 
+  /** Registers a GitHub repo into the DB (if not already there) and selects it. */
+  const handlePickGithubRepo = async (ghRepo: { githubId: number; owner: string; name: string; fullName: string }) => {
+    // Check if already in DB
+    const existing = dbRepos.find((r) => String(r.githubId) === String(ghRepo.githubId));
+    if (existing) {
+      setSelectedRepoId(existing.id);
+      setSelectedRepoLabel(existing.fullName);
+      return;
+    }
+
+    setRegisteringRepoId(ghRepo.githubId);
+    setError(null);
+    try {
+      const res = await fetch("/api/repos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner: ghRepo.owner, name: ghRepo.name, createNewOnGitHub: false }),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to register repository");
+      }
+      const repoData = await res.json();
+      setDbRepos((prev) => [repoData.repository, ...prev]);
+      setSelectedRepoId(repoData.repository.id);
+      setSelectedRepoLabel(repoData.repository.fullName);
+    } catch (err: any) {
+      setError(err.message || "Failed to register repository");
+    } finally {
+      setRegisteringRepoId(null);
+    }
+  };
+
   const handleNextStep = async () => {
     if (step === 1 && !name) {
       setError("Please enter a project name");
@@ -112,8 +151,9 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
             throw new Error(errData.error || "Failed to create GitHub repository");
           }
           const repoData = await res.json();
-          setSelectedRepoId(repoData.id);
-          setDbRepos((prev) => [repoData, ...prev]);
+          setSelectedRepoId(repoData.repository.id);
+          setSelectedRepoLabel(repoData.repository.fullName || newRepoName);
+          setDbRepos((prev) => [repoData.repository, ...prev]);
         } catch (err: any) {
           setError(err.message || "Failed to create repository on GitHub");
           setCreatingRepo(false);
@@ -122,8 +162,9 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
           setCreatingRepo(false);
         }
       } else {
+        // "pick" mode — user must have clicked a repo
         if (!selectedRepoId) {
-          setError("Please select a repository");
+          setError("Please select one of your GitHub repositories");
           return;
         }
       }
@@ -170,7 +211,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
   };
 
   return (
-    <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
+    <div className="max-w-3xl mx-auto w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
       {/* Wizard Header */}
       <div className="border-b border-slate-200 dark:border-slate-800 p-6 bg-slate-50/50 dark:bg-slate-950/50 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -190,22 +231,22 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
       </div>
 
       {/* Step Indicators */}
-      <div className="px-6 py-3 bg-slate-100/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-medium text-slate-500">
+      <div className="px-6 py-3 bg-slate-100/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 flex flex-wrap gap-2 items-center justify-between text-xs font-medium text-slate-500">
         <div className={`flex items-center gap-1.5 ${step >= 1 ? "text-indigo-600 dark:text-indigo-400 font-semibold" : ""}`}>
           <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] ${step >= 1 ? "bg-indigo-600 text-white" : "bg-slate-200 dark:bg-slate-800"}`}>1</span>
           Project Details
         </div>
-        <div className="h-0.5 w-8 bg-slate-200 dark:bg-slate-800" />
+        <div className="h-0.5 w-4 sm:w-8 bg-slate-200 dark:bg-slate-800" />
         <div className={`flex items-center gap-1.5 ${step >= 2 ? "text-indigo-600 dark:text-indigo-400 font-semibold" : ""}`}>
           <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] ${step >= 2 ? "bg-indigo-600 text-white" : "bg-slate-200 dark:bg-slate-800"}`}>2</span>
           GitHub Repo
         </div>
-        <div className="h-0.5 w-8 bg-slate-200 dark:bg-slate-800" />
+        <div className="h-0.5 w-4 sm:w-8 bg-slate-200 dark:bg-slate-800" />
         <div className={`flex items-center gap-1.5 ${step >= 3 ? "text-indigo-600 dark:text-indigo-400 font-semibold" : ""}`}>
           <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] ${step >= 3 ? "bg-indigo-600 text-white" : "bg-slate-200 dark:bg-slate-800"}`}>3</span>
           Jira Integration
         </div>
-        <div className="h-0.5 w-8 bg-slate-200 dark:bg-slate-800" />
+        <div className="h-0.5 w-4 sm:w-8 bg-slate-200 dark:bg-slate-800" />
         <div className={`flex items-center gap-1.5 ${step >= 4 ? "text-indigo-600 dark:text-indigo-400 font-semibold" : ""}`}>
           <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] ${step >= 4 ? "bg-indigo-600 text-white" : "bg-slate-200 dark:bg-slate-800"}`}>4</span>
           Review
@@ -230,7 +271,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                 placeholder="e.g. Core Authentication Service"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
               />
             </div>
             <div>
@@ -240,7 +281,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                 placeholder="High-level engineering project goals and domain scope..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
               />
             </div>
           </div>
@@ -248,23 +289,22 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
 
         {step === 2 && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <GitBranch className="h-4 w-4 text-indigo-500" />
-                GitHub Repository Setup
+                Select a GitHub Repository
               </h3>
-
               <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={() => setRepoMode("select")}
+                  onClick={() => setRepoMode("pick")}
                   className={`px-3 py-1 rounded-md transition-colors ${
-                    repoMode === "select"
+                    repoMode === "pick"
                       ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                      : "text-slate-600 dark:text-slate-400"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >
-                  Select Existing Repo
+                  Your Repos
                 </button>
                 <button
                   type="button"
@@ -272,56 +312,91 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                   className={`px-3 py-1 rounded-md transition-colors ${
                     repoMode === "create"
                       ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                      : "text-slate-600 dark:text-slate-400"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                   }`}
                 >
-                  Create New on GitHub
+                  Create New
                 </button>
               </div>
             </div>
 
-            {repoMode === "select" ? (
+            {repoMode === "pick" ? (
               loadingRepos ? (
                 <div className="py-8 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading your GitHub repositories...
                 </div>
-              ) : dbRepos.length === 0 ? (
-                <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-600 dark:text-amber-400 text-xs">
-                  No tracked repositories found in database yet. Switch to "Create New on GitHub" above to create one instantly!
+              ) : githubRepos.length === 0 ? (
+                <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-600 dark:text-amber-400 text-xs leading-relaxed">
+                  No GitHub repositories found. Make sure your GitHub account is connected.
                 </div>
               ) : (
-                <div className="grid gap-3 max-h-64 overflow-y-auto pr-1">
-                  {dbRepos.map((repo) => (
-                    <label
-                      key={repo.id}
-                      className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
-                        selectedRepoId === repo.id
-                          ? "border-indigo-500 bg-indigo-500/5 dark:bg-indigo-950/20"
-                          : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="repository"
-                          checked={selectedRepoId === repo.id}
-                          onChange={() => setSelectedRepoId(repo.id)}
-                          className="text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <div>
-                          <span className="text-sm font-semibold text-slate-900 dark:text-white block">{repo.fullName}</span>
-                          <span className="text-xs text-slate-500">ID: {repo.id} • {repo.htmlUrl}</span>
-                        </div>
-                      </div>
-                      {selectedRepoId === repo.id && <CheckCircle2 className="h-4 w-4 text-indigo-500" />}
-                    </label>
-                  ))}
+                <div className="space-y-3">
+                  {/* Search box */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder={`Search your ${githubRepos.length} repositories...`}
+                      value={repoSearch}
+                      onChange={(e) => setRepoSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                    />
+                  </div>
+
+                  {/* Selected indicator */}
+                  {selectedRepoId && selectedRepoLabel && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                      Selected: {selectedRepoLabel}
+                    </div>
+                  )}
+
+                  {/* Repo list */}
+                  <div className="grid gap-1.5 max-h-64 overflow-y-auto pr-1">
+                    {githubRepos
+                      .filter((r) =>
+                        repoSearch === "" ||
+                        r.fullName.toLowerCase().includes(repoSearch.toLowerCase())
+                      )
+                      .map((repo) => {
+                        const existingDbRepo = dbRepos.find((d) => String(d.githubId) === String(repo.githubId));
+                        const isSelected = existingDbRepo ? selectedRepoId === existingDbRepo.id : false;
+                        const isRegistering = registeringRepoId === repo.githubId;
+                        return (
+                          <button
+                            key={repo.githubId}
+                            type="button"
+                            onClick={() => handlePickGithubRepo(repo)}
+                            disabled={isRegistering}
+                            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all ${
+                              isSelected
+                                ? "border-indigo-500 bg-indigo-500/8 dark:bg-indigo-950/30 shadow-[0_0_0_1px_rgba(99,102,241,0.6)]"
+                                : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10"
+                            } disabled:opacity-50`}
+                          >
+                            <div className="min-w-0">
+                              <span className="text-sm font-semibold text-slate-900 dark:text-white block truncate">{repo.fullName}</span>
+                              {existingDbRepo && (
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Already tracked</span>
+                              )}
+                            </div>
+                            <div className="shrink-0 ml-3">
+                              {isRegistering ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                              ) : isSelected ? (
+                                <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+                              ) : null}
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
                 </div>
               )
             ) : (
               <div className="p-5 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 space-y-4">
-                <div className="text-xs text-slate-600 dark:text-slate-300">
+                <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   Enter a repository name below. We will automatically call the GitHub API to create a brand new repository on your GitHub account, initialize it, and link it to this Engineering Project.
                 </div>
                 <div>
@@ -331,7 +406,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                     placeholder="e.g. auth-microservice"
                     value={newRepoName}
                     onChange={(e) => setNewRepoName(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
                   />
                 </div>
                 <div>
@@ -341,7 +416,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                     placeholder="Optional repository description..."
                     value={newRepoDesc}
                     onChange={(e) => setNewRepoDesc(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
                   />
                 </div>
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
@@ -349,7 +424,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                     type="checkbox"
                     checked={newRepoPrivate}
                     onChange={(e) => setNewRepoPrivate(e.target.checked)}
-                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                    className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                   />
                   Make this GitHub Repository Private
                 </label>
@@ -370,7 +445,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                   type="checkbox"
                   checked={jiraConnected}
                   onChange={(e) => setJiraConnected(e.target.checked)}
-                  className="rounded text-purple-600 focus:ring-purple-500"
+                  className="rounded text-purple-600 focus:ring-purple-500 h-4 w-4"
                 />
                 Enable Jira Integration
               </label>
@@ -383,7 +458,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                   <select
                     value={selectedCloudId}
                     onChange={(e) => setSelectedCloudId(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-shadow"
                   >
                     {workspaces.map((w) => (
                       <option key={w.id} value={w.id}>
@@ -398,9 +473,9 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                   <select
                     value={selectedProjectKey}
                     onChange={(e) => setSelectedProjectKey(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition-shadow"
                   >
-                    {workspaces[0]?.projects?.map((p: any) => (
+                    {workspaces.find(w => w.id === selectedCloudId)?.projects?.map((p: any) => (
                       <option key={p.key} value={p.key}>
                         {p.key} - {p.name}
                       </option>
@@ -414,7 +489,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
                     href="/api/auth/jira/authorize"
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs transition-colors shadow-sm"
                   >
                     OAuth Login
                   </a>
@@ -434,7 +509,9 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
               </div>
               <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                 <span className="text-slate-500">GitHub Repository:</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400">{dbRepos.find((r) => r.id === selectedRepoId)?.fullName}</span>
+                <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                  {repoMode === "pick" ? (selectedRepoLabel || "—") : newRepoName || "—"}
+                </span>
               </div>
               <div className="flex justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                 <span className="text-slate-500">Jira Integration:</span>
@@ -470,7 +547,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
           >
             {creatingRepo ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating Repo on GitHub...
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying Repository...
               </>
             ) : (
               <>
@@ -482,7 +559,7 @@ export default function ProjectWizard({ onSuccess, onCancel }: ProjectWizardProp
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
           >
             {submitting ? (
               <>
