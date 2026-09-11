@@ -6,7 +6,11 @@ variable "aws_region" {
 
 variable "instance_type" {
   type        = string
-  default     = "t2.micro"
+  # t2.micro is the traditionally-documented free-tier type, but many AWS
+  # accounts (this one included) now enforce free-tier-eligible instance
+  # types only, and only t3.micro/t4g.micro qualify — not t2.micro. Verify
+  # with: aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true
+  default     = "t3.micro"
   description = "EC2 instance size"
 }
 

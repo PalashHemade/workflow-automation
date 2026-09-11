@@ -94,3 +94,16 @@ resource "aws_instance" "web_server" {
     Name = "Workflow-Automation-DevOps-Server"
   }
 }
+
+# Stable public IP — without this, the instance's public IP changes on every
+# terraform apply/destroy cycle, which breaks the GitHub OAuth App's callback
+# URL (must exactly match) every time you redeploy. An EIP costs nothing while
+# it stays attached to a running instance.
+resource "aws_eip" "web_eip" {
+  instance = aws_instance.web_server.id
+  domain   = "vpc"
+
+  tags = {
+    Name = "Workflow-Automation-DevOps-EIP"
+  }
+}

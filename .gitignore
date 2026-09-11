@@ -60,6 +60,7 @@ pnpm-lock.yaml
 keys/*.pem
 *.key
 aws.env
+deploy.env
 
 # ── Terraform State, Cache & Provider Locks ──────────────────
 *.tfstate
