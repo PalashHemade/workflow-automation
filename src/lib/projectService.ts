@@ -209,6 +209,8 @@ export async function createEngineeringProject(input: CreateProjectWizardInput) 
     });
 
     return proj;
+  }, {
+    timeout: 15000,
   });
 
 

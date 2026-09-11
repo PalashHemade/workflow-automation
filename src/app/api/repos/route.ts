@@ -11,12 +11,20 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    console.log("[REPOS DEBUG] ====== GET /api/repos START ======");
+    console.log("[REPOS DEBUG] Session exists:", !!session);
+    console.log("[REPOS DEBUG] Session user:", session?.user ? { id: (session.user as any).id, email: session.user.email, name: session.user.name } : "NO USER");
+
     if (!session || !session.user || !session.user.id) {
+      console.log("[REPOS DEBUG] ❌ UNAUTHORIZED — no session or session.user.id");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const userId = session.user.id;
+    console.log("[REPOS DEBUG] userId:", userId);
+
     const githubLogin = await getUserGithubLogin(userId);
+    console.log("[REPOS DEBUG] githubLogin:", githubLogin);
 
     // Fetch repositories already registered in our DB that this user tracked or owns on GitHub
     const dbRepos = await db.repository.findMany({
@@ -30,11 +38,16 @@ export async function GET(req: NextRequest) {
       include: { webhook: true },
       orderBy: { name: "asc" },
     });
+    console.log("[REPOS DEBUG] dbRepos count:", dbRepos.length);
 
     // Fetch user's GitHub Account to retrieve the access token
     const userAccount = await db.account.findFirst({
       where: { userId, provider: "github" },
     });
+    console.log("[REPOS DEBUG] userAccount found:", !!userAccount);
+    console.log("[REPOS DEBUG] userAccount.provider:", userAccount?.provider);
+    console.log("[REPOS DEBUG] userAccount.access_token exists:", !!userAccount?.access_token);
+    console.log("[REPOS DEBUG] userAccount.access_token first 10 chars:", userAccount?.access_token?.substring(0, 10) + "...");
 
     let githubRepos: any[] = [];
     let githubError: string | null = null;
@@ -42,9 +55,10 @@ export async function GET(req: NextRequest) {
 
     if (hasToken) {
       try {
-        const ghResponse = await fetch(
-          "https://api.github.com/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&per_page=100&sort=updated",
-          {
+        const apiUrl = "https://api.github.com/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&per_page=100&sort=updated";
+        console.log("[REPOS DEBUG] Fetching GitHub API:", apiUrl);
+
+        const ghResponse = await fetch(apiUrl, {
             headers: {
               Accept: "application/vnd.github+json",
               Authorization: `Bearer ${userAccount!.access_token}`,
@@ -53,22 +67,34 @@ export async function GET(req: NextRequest) {
             cache: "no-store",
           }
         );
+
+        console.log("[REPOS DEBUG] GitHub API response status:", ghResponse.status);
+        console.log("[REPOS DEBUG] GitHub API response headers - X-RateLimit-Remaining:", ghResponse.headers.get("x-ratelimit-remaining"));
+        console.log("[REPOS DEBUG] GitHub API response headers - X-OAuth-Scopes:", ghResponse.headers.get("x-oauth-scopes"));
+
         if (ghResponse.ok) {
           githubRepos = await ghResponse.json();
+          console.log("[REPOS DEBUG] ✅ GitHub repos fetched successfully, count:", githubRepos.length);
+          if (githubRepos.length > 0) {
+            console.log("[REPOS DEBUG] First 3 repos:", githubRepos.slice(0, 3).map((r: any) => r.full_name));
+          }
         } else {
           const errText = await ghResponse.text();
           githubError = `GitHub API ${ghResponse.status}: ${errText}`;
-          console.error("GitHub API error fetching repos:", githubError);
+          console.error("[REPOS DEBUG] ❌ GitHub API error:", githubError);
         }
       } catch (err: any) {
         githubError = err?.message ?? "Network error calling GitHub API";
-        console.error("Error fetching repos from GitHub API:", err);
+        console.error("[REPOS DEBUG] ❌ Network/fetch error:", err);
       }
     } else {
       githubError = userAccount
         ? "GitHub account found but access_token is null — please sign out and sign back in"
         : "No GitHub account linked to this user in the database";
+      console.error("[REPOS DEBUG] ❌ No token:", githubError);
     }
+
+    console.log("[REPOS DEBUG] ====== FINAL RESULT: dbRepos=" + dbRepos.length + ", githubRepos=" + githubRepos.length + ", error=" + githubError + " ======");
 
     const serializedDbRepos = dbRepos.map((repo) => ({
       ...repo,
@@ -91,7 +117,7 @@ export async function GET(req: NextRequest) {
         htmlUrl: r.html_url,
       })),
       // Diagnostic fields — shown in UI if githubRepos is empty
-      _debug: { hasToken, githubError, userId },
+      _debug: { hasToken, githubError, userId, githubLogin, dbReposCount: dbRepos.length, githubReposCount: githubRepos.length },
     });
   } catch (error: any) {
     console.error("Fetch repos error:", error);

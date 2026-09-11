@@ -21,6 +21,13 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // In development, skip the custom token check entirely.
+  // Route handlers already verify the session via getServerSession().
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[MIDDLEWARE DEV BYPASS]", pathname, "— skipping token check");
+    return NextResponse.next();
+  }
+
   const accessToken = req.cookies.get("app_access_token")?.value;
 
   if (!accessToken) {
