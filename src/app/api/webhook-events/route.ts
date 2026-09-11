@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { getServerSession } from "next-auth";
-import { authOptions, checkRepositoryAccess } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth/auth";
 
 export const dynamic = "force-dynamic";
 

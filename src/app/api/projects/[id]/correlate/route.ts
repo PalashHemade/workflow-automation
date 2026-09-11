@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { correlateProject, manuallyCorrelateItem } from "@/lib/correlationEngine";
+import { authOptions } from "@/lib/auth/auth";
+import { correlateProject, manuallyCorrelateItem } from "@/lib/project/correlationEngine";
 
 export const dynamic = "force-dynamic";
 

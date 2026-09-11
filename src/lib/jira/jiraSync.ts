@@ -1,5 +1,5 @@
-import { db } from "@/lib/db";
-import { JiraClient, getValidJiraAccessToken } from "@/lib/jira";
+import { db } from "@/lib/core/db";
+import { JiraClient, getValidJiraAccessToken } from "@/lib/jira/jira";
 
 export interface SyncJiraOptions {
   projectId: string;

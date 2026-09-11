@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { getServerSession } from "next-auth";
-import { authOptions, checkRepositoryAccess } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth/auth";
 import { EventEntityType, EventImportance } from "@prisma/client";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("Timeline");
 
 export const dynamic = "force-dynamic";
 
@@ -140,7 +143,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("Timeline API error:", error);
+    log.error("Timeline API error: %s", error?.message ?? error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error.message },
       { status: 500 }

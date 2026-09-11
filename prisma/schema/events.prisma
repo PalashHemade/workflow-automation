@@ -1,0 +1,129 @@
+// Generic Event Bus for Project Events (Normalized Domain)
+model ProjectEvent {
+  id                   String              @id @default(cuid())
+  provider             IntegrationProvider @default(GITHUB)
+  entityType           EventEntityType     @default(COMMIT)
+  entityId             String?
+  parentEventId        String?
+  actorId              String?
+  actorName            String
+  title                String
+  description          String?
+  importance           EventImportance     @default(NORMAL)
+  source               EventSource         @default(SYSTEM)
+  version              Int                 @default(1)
+  processingStatus     ProcessingStatus    @default(PENDING)
+  processedAt          DateTime?
+  metadata             Json
+  timestamp            DateTime            @default(now())
+  createdAt            DateTime            @default(now())
+  engineeringProjectId String?
+  repositoryId         String?
+  engineeringProject   EngineeringProject? @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+  repository           Repository?         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
+  @@index([repositoryId])
+  @@index([timestamp])
+  @@index([entityType])
+}
+
+// Domain Enums for Phase 5
+enum SyncStatus {
+  IDLE
+  SYNCING
+  SUCCESS
+  FAILED
+}
+
+enum SprintState {
+  FUTURE
+  ACTIVE
+  CLOSED
+}
+
+enum PipelineStatus {
+  SUCCESS
+  FAILURE
+  IN_PROGRESS
+  ABORTED
+}
+
+enum IntegrationProvider {
+  GITHUB
+  JIRA
+  JENKINS
+  SLACK
+  SONARQUBE
+  GITLAB
+  AZURE_DEVOPS
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum CorrelationMethod {
+  BRANCH
+  COMMIT
+  PR_TITLE
+  PR_DESCRIPTION
+  MANUAL
+  AI
+}
+
+enum InsightSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum InsightStatus {
+  ACTIVE
+  RESOLVED
+  IGNORED
+}
+
+enum InsightType {
+  RISK
+  SUMMARY
+  BOTTLENECK
+  TECH_DEBT
+  DEPLOYMENT
+  SECURITY
+}
+
+enum EventEntityType {
+  COMMIT
+  PULL_REQUEST
+  STORY
+  TASK
+  SPRINT
+  PIPELINE
+  AI_INSIGHT
+  SYSTEM
+}
+
+enum EventImportance {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum EventSource {
+  WEBHOOK
+  SYNC
+  MANUAL
+  SYSTEM
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}

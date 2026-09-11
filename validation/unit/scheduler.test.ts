@@ -1,5 +1,5 @@
 import { TestResult, TEST_USER_ID, assert, assertEqual } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function runSchedulerUnitTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

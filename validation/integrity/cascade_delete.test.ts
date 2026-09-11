@@ -1,5 +1,5 @@
 import { TestResult, TEST_USER_ID, assert, assertEqual } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { EventEntityType, EventImportance, EventSource, ProcessingStatus } from "@prisma/client";
 
 export async function runCascadeDeleteIntegrityTests(): Promise<TestResult[]> {

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/lib/auth/auth";
+import { getValidGithubAccessToken } from "@/lib/auth/githubTokenService";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("CommitFiles");
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +43,12 @@ export async function GET(req: NextRequest, { params }: { params: { sha: string 
 
     // On-demand loading: if no files are cached in DB, fetch live from GitHub and persist
     if (commit.files.length === 0) {
-      const githubAccount = repo.user.accounts.find((acc) => acc.provider === "github");
-      const accessToken = githubAccount?.access_token;
+      let accessToken: string | null = null;
+      try {
+        accessToken = await getValidGithubAccessToken(repo.userId);
+      } catch (err: any) {
+        log.warn("No usable GitHub token for user %s, skipping live file fetch for commit %s: %s", repo.userId, sha, err?.message ?? err);
+      }
 
       if (accessToken) {
         try {
@@ -75,6 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: { sha: string 
               });
 
               // Return the freshly fetched files
+              log.success("Fetched and cached %d files for commit %s", files.length, sha);
               return NextResponse.json({
                 commitSha: commit.sha,
                 message: commit.message,
@@ -84,10 +93,10 @@ export async function GET(req: NextRequest, { params }: { params: { sha: string 
               });
             }
           } else {
-            console.warn(`GitHub API returned ${res.status} for commit ${sha} files`);
+            log.warn("GitHub API returned %s for commit %s files", res.status, sha);
           }
-        } catch (fetchErr) {
-          console.error(`Failed to fetch commit files from GitHub for ${sha}:`, fetchErr);
+        } catch (fetchErr: any) {
+          log.error("Failed to fetch commit files from GitHub for %s: %s", sha, fetchErr?.message ?? fetchErr);
         }
       }
     }
@@ -100,6 +109,7 @@ export async function GET(req: NextRequest, { params }: { params: { sha: string 
       source: "db",
     });
   } catch (error: any) {
+    log.error("GET /api/commits/[sha]/files failed: %s", error?.message ?? error);
     return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
   }
 }

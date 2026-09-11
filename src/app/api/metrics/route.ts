@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { getServerSession } from "next-auth";
-import { authOptions, checkRepositoryAccess } from "@/lib/auth";
+import { authOptions, checkRepositoryAccess } from "@/lib/auth/auth";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("Metrics");
 
 export const dynamic = "force-dynamic";
 
@@ -147,7 +150,7 @@ export async function GET(req: NextRequest) {
       topContributors,
     });
   } catch (error: any) {
-    console.error("Fetch metrics error:", error);
+    log.error("Fetch metrics error: %s", error?.message ?? error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error.message },
       { status: 500 }

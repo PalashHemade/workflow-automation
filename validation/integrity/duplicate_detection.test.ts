@@ -1,5 +1,5 @@
 import { TestResult, TEST_USER_ID, assertThrows } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function runDuplicateDetectionIntegrityTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

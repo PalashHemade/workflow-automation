@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { authOptions } from "@/lib/auth/auth";
+import { getValidGithubAccessToken } from "@/lib/auth/githubTokenService";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("RepoInfo");
 
 export const dynamic = "force-dynamic";
 
@@ -28,18 +31,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Retrieve the authenticated user's GitHub token
-    const userAccount = await db.account.findFirst({
-      where: { userId: session.user.id, provider: "github" },
-    });
-
+    // Retrieve a valid (auto-refreshed if needed) GitHub token for the authenticated user
     const headers: Record<string, string> = {
       Accept: "application/vnd.github+json",
       "User-Agent": "github-analytics-dashboard",
     };
 
-    if (userAccount?.access_token) {
-      headers["Authorization"] = `Bearer ${userAccount.access_token}`;
+    try {
+      const accessToken = await getValidGithubAccessToken(session.user.id);
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    } catch (err: any) {
+      log.warn("No usable GitHub token for user %s, falling back to unauthenticated request: %s", session.user.id, err?.message ?? err);
     }
 
     const ghResponse = await fetch(
@@ -49,6 +51,7 @@ export async function GET(req: NextRequest) {
 
     if (!ghResponse.ok) {
       const errText = await ghResponse.text();
+      log.error("GitHub API error fetching %s/%s: %s", owner, name, errText);
       return NextResponse.json(
         { error: `GitHub API error: ${errText}` },
         { status: ghResponse.status }
@@ -56,6 +59,7 @@ export async function GET(req: NextRequest) {
     }
 
     const repo = await ghResponse.json();
+    log.success("Fetched repo info for %s/%s", owner, name);
 
     // size is in KB as reported by GitHub
     const sizeKB: number = repo.size ?? 0;
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
       pushedAt: repo.pushed_at ?? null,
     });
   } catch (error: any) {
-    console.error("Repo info error:", error);
+    log.error("Repo info error: %s", error?.message ?? error);
     return NextResponse.json(
       { error: "Internal Server Error", details: error.message },
       { status: 500 }

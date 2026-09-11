@@ -1,0 +1,251 @@
+// Existing & Expanded Repository Model
+model Repository {
+  id                       String               @id @default(cuid())
+  githubId                 BigInt               @unique
+  name                     String
+  owner                    String
+  fullName                 String
+  htmlUrl                  String
+  isTracked                Boolean              @default(false)
+  webhookEnabled           Boolean              @default(false)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  userId                   String
+  trackingUserIds          String               @default("")
+  lastWebhookEvent         String?
+  lastWebhookAt            DateTime?
+  displayName              String?
+  isArchived               Boolean              @default(false)
+  lastSyncedAt             DateTime?
+  lastSuccessfulSyncAt     DateTime?
+  lastFailedSyncAt         DateTime?
+  lastSuccessfulCommitSha  String?
+  lastProcessedPullRequest Int?
+  syncStatus               String               @default("idle")
+  lastSyncError            String?
+  syncFailureCount         Int                  @default(0)
+  nextAllowedSyncAt        DateTime?
+  pollingInterval          Int                  @default(60)
+  syncLogs                 BackgroundSyncLog[]
+  branches                 Branch[]
+  commits                  Commit[]
+  engineeringProject       EngineeringProject?
+  projectEvents            ProjectEvent[]
+  pullRequests             PullRequest[]
+  user                     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  snapshots                RepositorySnapshot[]
+  webhook                  RepositoryWebhook?
+  webhookEvents            WebhookEvent[]
+}
+
+model Contributor {
+  id             String          @id @default(cuid())
+  githubId       BigInt?         @unique
+  login          String          @unique
+  name           String?
+  email          String?
+  avatarUrl      String?
+  commits        Commit[]
+  pullRequests   PullRequest[]
+  reviews        Review[]
+  reviewComments ReviewComment[]
+}
+
+model Commit {
+  id            String        @id @default(cuid())
+  sha           String        @unique
+  message       String
+  url           String
+  committedAt   DateTime
+  repositoryId  String
+  contributorId String?
+  authorName    String
+  authorEmail   String
+  authorAvatar  String?
+  contributor   Contributor?  @relation(fields: [contributorId], references: [id])
+  repository    Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  files         CommitFile[]
+  storyCommits  StoryCommit[]
+
+  @@index([repositoryId])
+  @@index([committedAt])
+}
+
+model PullRequest {
+  id                String             @id @default(cuid())
+  githubId          BigInt             @unique
+  number            Int
+  title             String
+  state             String
+  url               String
+  createdAt         DateTime
+  updatedAt         DateTime
+  closedAt          DateTime?
+  mergedAt          DateTime?
+  merged            Boolean            @default(false)
+  repositoryId      String
+  contributorId     String?
+  authorName        String
+  authorEmail       String
+  authorAvatar      String?
+  contributor       Contributor?       @relation(fields: [contributorId], references: [id])
+  repository        Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  files             PullRequestFile[]
+  reviews           Review[]
+  comments          ReviewComment[]
+  storyPullRequests StoryPullRequest[]
+
+  @@index([repositoryId])
+  @@index([createdAt])
+}
+
+model CommitFile {
+  id        String  @id @default(cuid())
+  commitId  String
+  filename  String
+  status    String
+  additions Int
+  deletions Int
+  changes   Int
+  patch     String?
+  commit    Commit  @relation(fields: [commitId], references: [id], onDelete: Cascade)
+
+  @@index([commitId])
+}
+
+model PullRequestFile {
+  id            String      @id @default(cuid())
+  pullRequestId String
+  filename      String
+  status        String
+  additions     Int
+  deletions     Int
+  changes       Int
+  patch         String?
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+
+  @@index([pullRequestId])
+}
+
+model Review {
+  id            String          @id @default(cuid())
+  githubId      BigInt          @unique
+  pullRequestId String
+  contributorId String?
+  authorName    String
+  authorAvatar  String?
+  body          String?
+  state         String
+  submittedAt   DateTime
+  contributor   Contributor?    @relation(fields: [contributorId], references: [id])
+  pullRequest   PullRequest     @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  comments      ReviewComment[]
+
+  @@index([pullRequestId])
+}
+
+model ReviewComment {
+  id            String       @id @default(cuid())
+  githubId      BigInt       @unique
+  pullRequestId String
+  reviewId      String?
+  contributorId String?
+  authorName    String
+  authorAvatar  String?
+  path          String
+  line          Int?
+  body          String
+  diffHunk      String?
+  createdAt     DateTime
+  updatedAt     DateTime
+  contributor   Contributor? @relation(fields: [contributorId], references: [id])
+  pullRequest   PullRequest  @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  review        Review?      @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([pullRequestId])
+  @@index([reviewId])
+}
+
+model Branch {
+  id           String     @id @default(cuid())
+  name         String
+  sha          String
+  isDefault    Boolean    @default(false)
+  isProtected  Boolean    @default(false)
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, name])
+  @@index([repositoryId])
+}
+
+model WebhookEvent {
+  id           String      @id @default(cuid())
+  repositoryId String?
+  eventType    String
+  action       String?
+  payload      String
+  processedAt  DateTime    @default(now())
+  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([processedAt])
+}
+
+model RepositoryWebhook {
+  id                     String     @id @default(cuid())
+  repositoryId           String     @unique
+  githubWebhookId        BigInt?
+  status                 String     @default("active")
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  lastSuccessfulDelivery DateTime?
+  lastDeliveryAttempt    DateTime?
+  isActive               Boolean    @default(true)
+  repository             Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+}
+
+model BackgroundSyncLog {
+  id               String      @id @default(cuid())
+  repositoryId     String?
+  startedAt        DateTime    @default(now())
+  completedAt      DateTime?
+  syncType         String
+  status           String
+  commitsProcessed Int         @default(0)
+  prsProcessed     Int         @default(0)
+  durationMs       Int         @default(0)
+  errorMsg         String?
+  repository       Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([startedAt])
+}
+
+model BackgroundSyncStatus {
+  id        String   @id @default("singleton")
+  lastRunAt DateTime @default(now())
+  status    String   @default("healthy")
+  errorMsg  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Historical Repository Snapshots for Charting
+model RepositorySnapshot {
+  id                String     @id @default(cuid())
+  repositoryId      String
+  commitCount       Int        @default(0)
+  pullRequestCount  Int        @default(0)
+  contributorsCount Int        @default(0)
+  openIssuesCount   Int        @default(0)
+  closedIssuesCount Int        @default(0)
+  starsCount        Int        @default(0)
+  forksCount        Int        @default(0)
+  size              Int        @default(0)
+  capturedAt        DateTime   @default(now())
+  repository        Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([capturedAt])
+}

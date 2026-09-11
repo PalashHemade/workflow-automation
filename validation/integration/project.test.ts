@@ -1,6 +1,6 @@
 import { TestResult, assert, assertEqual, TEST_USER_ID } from "../utils";
-import { db } from "@/lib/db";
-import { createEngineeringProject, listEngineeringProjects, deleteEngineeringProject } from "@/lib/projectService";
+import { db } from "@/lib/core/db";
+import { createEngineeringProject, listEngineeringProjects, deleteEngineeringProject } from "@/lib/project/projectService";
 
 export async function runProjectIntegrationTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

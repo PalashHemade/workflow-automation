@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rotateRefreshToken } from "@/lib/tokenService";
-import { setTokenCookies } from "@/lib/auth";
+import { rotateRefreshToken } from "@/lib/auth/tokenService";
+import { setTokenCookies } from "@/lib/auth/auth";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("AuthRefresh");
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +53,10 @@ export async function POST(req: NextRequest) {
       expires: refreshTokenExpiresAt,
     });
 
+    log.success("Rotated app session token pair");
     return res;
   } catch (err: any) {
-    console.error("[/api/auth/refresh] Rotation failed:", err?.message);
+    log.warn("Refresh token rotation failed: %s", err?.message);
 
     // Clear cookies so the client cleans up automatically
     const res = NextResponse.json(

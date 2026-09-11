@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateToken } from "@/lib/tokenService";
-
-/**
- * Routes that bypass the custom token check entirely:
- * - /api/auth/*   — NextAuth endpoints (login, callback, session, signout)
- * - /api/webhooks/* — GitHub webhook ingestion (uses its own HMAC signature check)
- */
-const PUBLIC_API_PREFIXES = ["/api/auth", "/api/webhooks"];
+import { isPublicApiRoute } from "./middleware/publicRoutes";
+import { checkAppAccessToken, isDevBypass, logDevBypass } from "./middleware/authGuard";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -16,46 +10,26 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Skip public API routes
-  if (PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))) {
+  // Skip public API routes (NextAuth, GitHub webhooks — each has its own auth mechanism)
+  if (isPublicApiRoute(pathname)) {
     return NextResponse.next();
   }
 
-  // In development, skip the custom token check entirely.
-  // Route handlers already verify the session via getServerSession().
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[MIDDLEWARE DEV BYPASS]", pathname, "— skipping token check");
+  // In development, route handlers already verify the session themselves
+  if (isDevBypass()) {
+    logDevBypass(pathname);
     return NextResponse.next();
   }
 
-  const accessToken = req.cookies.get("app_access_token")?.value;
-
-  if (!accessToken) {
-    return NextResponse.json(
-      { error: "Unauthorized", code: "UNAUTHORIZED" },
-      { status: 401 }
-    );
+  const result = checkAppAccessToken(req);
+  if (!result.ok) {
+    return result.response;
   }
 
-  // Validate signature + expiry directly in the middleware (no DB call — fast)
-  try {
-    const secret = process.env.NEXTAUTH_SECRET ?? "";
-    const { userId } = validateToken(accessToken, secret);
-
-    // Forward userId to API route handlers via a request header
-    const requestHeaders = new Headers(req.headers);
-    requestHeaders.set("x-user-id", userId);
-    return NextResponse.next({ request: { headers: requestHeaders } });
-  } catch (err: any) {
-    const isExpired = err?.message === "Token expired";
-    return NextResponse.json(
-      {
-        error: isExpired ? "Access token expired" : "Invalid token",
-        code: isExpired ? "TOKEN_EXPIRED" : "UNAUTHORIZED",
-      },
-      { status: 401 }
-    );
-  }
+  // Forward userId to API route handlers via a request header
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-user-id", result.userId);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

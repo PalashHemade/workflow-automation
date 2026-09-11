@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { runIncrementalSync } from "@/lib/syncEngine";
-import { syncJiraProject } from "@/lib/jiraSync";
+import { authOptions } from "@/lib/auth/auth";
+import { db } from "@/lib/core/db";
+import { runIncrementalSync } from "@/lib/github/syncEngine";
+import { syncJiraProject } from "@/lib/jira/jiraSync";
 
 export const dynamic = "force-dynamic";
 

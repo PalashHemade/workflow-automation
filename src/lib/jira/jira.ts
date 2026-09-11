@@ -1,4 +1,7 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("Jira");
 
 export interface JiraCloudWorkspace {
   id: string;
@@ -112,9 +115,10 @@ export async function getValidJiraAccessToken(integrationId: string): Promise<st
         },
       });
 
+      log.success("Refreshed Jira token for integration %s", integrationId);
       return data.access_token;
     } catch (err: any) {
-      console.warn("Failed refreshing Jira token, returning existing token for fallback:", err.message);
+      log.warn("Failed refreshing Jira token for integration %s, falling back to existing token: %s", integrationId, err.message);
       return credential.accessToken;
     }
   }

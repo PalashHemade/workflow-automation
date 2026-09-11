@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { IntegrationProvider, EventEntityType, EventImportance } from "@prisma/client";
 
 export interface TimelineQueryOptions {

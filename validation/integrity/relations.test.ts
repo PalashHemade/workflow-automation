@@ -1,5 +1,5 @@
 import { TestResult, assertEqual } from "../utils";
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export async function runRelationsIntegrityTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

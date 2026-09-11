@@ -1,7 +1,10 @@
-import { db } from "@/lib/db";
-import { runIncrementalSync } from "@/lib/syncEngine";
-import { syncJiraProject } from "@/lib/jiraSync";
-import { correlateProject } from "@/lib/correlationEngine";
+import { db } from "@/lib/core/db";
+import { runIncrementalSync } from "@/lib/github/syncEngine";
+import { syncJiraProject } from "@/lib/jira/jiraSync";
+import { correlateProject } from "@/lib/project/correlationEngine";
+import { createLogger } from "@/lib/core/logger";
+
+const log = createLogger("ProjectService");
 
 export interface CreateProjectWizardInput {
   name: string;
@@ -231,8 +234,9 @@ export async function createEngineeringProject(input: CreateProjectWizardInput) 
       where: { id: project.id },
       data: { syncStatus: "SUCCESS", lastSyncAt: new Date() },
     });
+    log.success("Initial sync completed for project %s", project.id);
   } catch (err: any) {
-    console.warn("Initial sync for project failed, project saved with status FAILED:", err.message);
+    log.warn("Initial sync for project failed, project saved with status FAILED: %s", err.message);
     await db.engineeringProject.update({
       where: { id: project.id },
       data: { syncStatus: "FAILED" },

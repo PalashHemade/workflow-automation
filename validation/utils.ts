@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 
 export const VALIDATION_BASE_URL = process.env.VALIDATION_BASE_URL || "http://localhost:3000";
 

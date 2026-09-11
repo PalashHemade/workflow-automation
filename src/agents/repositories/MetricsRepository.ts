@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/core/db";
 import { ProjectMetrics, Sprint, Story, PipelineRun } from "@prisma/client";
 
 export class MetricsRepository {

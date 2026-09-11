@@ -1,6 +1,6 @@
 import { TestResult, assert, assertEqual, TEST_USER_ID } from "../utils";
-import { db } from "@/lib/db";
-import { extractJiraIssueKeys, correlateProject } from "@/lib/correlationEngine";
+import { db } from "@/lib/core/db";
+import { extractJiraIssueKeys, correlateProject } from "@/lib/project/correlationEngine";
 
 export async function runCorrelationEngineUnitTests(): Promise<TestResult[]> {
   const results: TestResult[] = [];

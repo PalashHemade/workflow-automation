@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { getUnifiedTimeline } from "@/lib/projectTimeline";
+import { authOptions } from "@/lib/auth/auth";
+import { getUnifiedTimeline } from "@/lib/events/projectTimeline";
 import { IntegrationProvider, EventEntityType, EventImportance } from "@prisma/client";
 
 export const dynamic = "force-dynamic";

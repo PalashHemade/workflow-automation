@@ -1,6 +1,9 @@
-import { db } from "./db";
+import { db } from "../core/db";
 import { runIncrementalSync } from "./syncEngine";
-import { pruneLogs } from "./cleaner";
+import { pruneLogs } from "../core/cleaner";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("Scheduler");
 
 /**
  * Main stateless background sync execution job.
@@ -27,7 +30,7 @@ export async function runStatelessSyncJob() {
     const errorMsg = `Sync skipped: GitHub API rate limits exhausted. Reset in ${Math.ceil(
       (globalThis.lastRateLimitReset.getTime() - Date.now()) / 1000
     )} seconds.`;
-    console.warn(errorMsg);
+    log.warn(errorMsg);
 
     await db.backgroundSyncStatus.update({
       where: { id: "singleton" },
@@ -74,22 +77,23 @@ export async function runStatelessSyncJob() {
     return { success: true, message: "No repositories require scheduled synchronization.", reposSynced: 0 };
   }
 
-  console.log(`Background scheduler: Found ${eligibleRepos.length} eligible repositories to sync.`);
+  log.info("Found %s eligible repositories to sync", eligibleRepos.length);
   let successCount = 0;
   let failCount = 0;
   let firstErrorMsg: string | null = null;
 
   for (const repo of eligibleRepos) {
     try {
-      console.log(`Background sync starting for ${repo.fullName} (${repo.id})...`);
+      log.info("Background sync starting for %s (%s)...", repo.fullName, repo.id);
       await runIncrementalSync(repo.id, "scheduled");
       successCount++;
+      log.success("Background sync succeeded for %s", repo.fullName);
     } catch (err: any) {
       failCount++;
       if (!firstErrorMsg) {
         firstErrorMsg = err.message || `Failed to sync ${repo.fullName}`;
       }
-      console.error(`Background sync failed for repository ${repo.fullName} (${repo.id}):`, err);
+      log.error("Background sync failed for repository %s (%s): %s", repo.fullName, repo.id, err?.message ?? err);
     }
   }
 
