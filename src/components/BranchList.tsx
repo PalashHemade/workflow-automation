@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { GitBranch, ShieldAlert, ShieldCheck, Key, Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface Branch {
   id: string;
@@ -40,68 +44,64 @@ export default function BranchList({ repositoryId }: BranchListProps) {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/30">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+      <div className="flex h-64 items-center justify-center rounded-xl border border-border bg-secondary/30">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-slate-850 bg-slate-900/20 p-5 shadow-lg space-y-4">
-      <h3 className="text-base font-semibold text-white flex items-center gap-2">
-        <GitBranch className="h-4.5 w-4.5 text-indigo-400" />
+    <Card className="space-y-4 p-5">
+      <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
+        <GitBranch className="h-4.5 w-4.5 text-primary" />
         Repository Branches
       </h3>
 
       {branches.length === 0 ? (
-        <div className="text-center py-8 text-slate-500 text-xs">No active branches found.</div>
+        <EmptyState icon={GitBranch} title="No branches found" description="Branches will appear here once this repository has synced." />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 text-slate-400 font-semibold">
-                <th className="pb-3 pr-4">Branch Name</th>
-                <th className="pb-3 px-4">Protection</th>
-                <th className="pb-3 pl-4">Commit Ref (SHA)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-850/60">
-              {branches.map((b) => (
-                <tr key={b.id} className="hover:bg-slate-900/10">
-                  <td className="py-3.5 pr-4 flex items-center gap-2 font-medium text-slate-200">
-                    <GitBranch className="h-4 w-4 text-slate-500" />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Branch Name</TableHead>
+              <TableHead>Protection</TableHead>
+              <TableHead>Commit Ref (SHA)</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {branches.map((b) => (
+              <TableRow key={b.id}>
+                <TableCell className="font-medium text-foreground">
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="h-4 w-4 text-muted-foreground" />
                     {b.name}
-                    {b.isDefault && (
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-700/40 text-indigo-400">
-                        Default
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    {b.isProtected ? (
-                      <span className="flex items-center gap-1 text-[10px] text-emerald-450 font-semibold">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        Protected
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                        <ShieldAlert className="h-3.5 w-3.5" />
-                        None
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 pl-4 font-mono text-[10px] text-slate-500">
-                    <span className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded w-max border border-slate-900">
-                      <Key className="h-3 w-3 text-slate-650" />
-                      {b.sha}
+                    {b.isDefault && <Badge>Default</Badge>}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {b.isProtected ? (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Protected
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      None
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="font-mono text-[11px] text-muted-foreground">
+                  <span className="flex w-max items-center gap-1 rounded bg-secondary px-2 py-0.5">
+                    <Key className="h-3 w-3" />
+                    {b.sha}
+                  </span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </div>
+    </Card>
   );
 }

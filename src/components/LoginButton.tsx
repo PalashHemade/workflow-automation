@@ -8,7 +8,7 @@ export default function LoginButton() {
   return (
     <button
       onClick={() => signIn("github")}
-      className="group relative flex items-center justify-center gap-2.5 rounded-xl bg-white text-black hover:bg-slate-100 px-6 py-3.5 font-semibold transition duration-200 shadow-[0_0_30px_-5px_rgba(99,102,241,0.5)] hover:scale-[1.02] active:scale-[0.98]"
+      className="group relative flex items-center justify-center gap-2.5 rounded-xl bg-white text-slate-900 hover:bg-slate-100 px-6 py-3.5 font-semibold transition duration-200 shadow-[0_0_30px_-5px_rgba(99,102,241,0.5)] hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <Github className="h-5 w-5 fill-current" />
       Connect GitHub Account

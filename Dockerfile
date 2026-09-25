@@ -12,8 +12,11 @@ WORKDIR /app
 # Copy dependency files first for better Docker caching
 COPY package.json package-lock.json ./
 
-# Copy Prisma schema before npm install because postinstall may run prisma generate
+# Copy Prisma schema + config before npm install, since postinstall runs
+# `prisma generate` — without prisma.config.ts, Prisma can't locate the
+# multi-file prisma/schema/ folder and this step fails.
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
 # Install ALL dependencies, including the Prisma CLI
 RUN npm ci
@@ -34,6 +37,13 @@ COPY . .
 
 # Disable Next.js telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# V8 sizes its default heap off the container's *physical* RAM, not any swap
+# that's provisioned — on small instances (e.g. t3.micro) that default is far
+# too low for a `next build` type-check pass and OOM-crashes the build even
+# with swap available, since V8 never tries to use it. Raise the ceiling
+# explicitly so it actually uses the memory that's there.
+ENV NODE_OPTIONS="--max-old-space-size=2560"
 
 # Generate Prisma Client explicitly
 RUN ./node_modules/.bin/prisma generate

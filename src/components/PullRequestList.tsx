@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import {
   GitPullRequest,
-  CheckCircle2,
   AlertCircle,
   Clock,
   MessageSquare,
@@ -11,9 +10,16 @@ import {
   ChevronUp,
   Loader2,
   FileCode,
-  CornerDownRight,
   Eye,
 } from "lucide-react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { PillTabsList, PillTabsTrigger, Tabs } from "@/components/ui/Tabs";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { cn } from "@/lib/core/utils";
 
 interface Contributor {
   name: string | null;
@@ -80,8 +86,7 @@ export default function PullRequestList({ repositoryId }: PullRequestListProps) 
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
-  // Expanded timeline reviews & comments
+
   const [reviews, setReviews] = useState<PRReview[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
@@ -131,32 +136,29 @@ export default function PullRequestList({ repositoryId }: PullRequestListProps) 
   const getStateBadge = (pr: PullRequest) => {
     if (pr.merged) {
       return (
-        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-purple-950/60 text-purple-400 border border-purple-800/40">
-          <GitPullRequest className="h-3 w-3" />
-          Merged
-        </span>
+        <Badge variant="info">
+          <GitPullRequest className="h-3 w-3" /> Merged
+        </Badge>
       );
     }
     if (pr.state === "open") {
       return (
-        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
-          <Clock className="h-3 w-3" />
-          Open
-        </span>
+        <Badge variant="success">
+          <Clock className="h-3 w-3" /> Open
+        </Badge>
       );
     }
     return (
-      <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-rose-950/60 text-rose-400 border border-rose-800/40">
-        <AlertCircle className="h-3 w-3" />
-        Closed
-      </span>
+      <Badge variant="danger">
+        <AlertCircle className="h-3 w-3" /> Closed
+      </Badge>
     );
   };
 
   const renderDiffHunk = (hunk: string | null) => {
     if (!hunk) return null;
     return (
-      <pre className="text-[10px] font-mono p-2.5 overflow-x-auto bg-slate-950 text-slate-400 rounded-lg leading-tight border border-slate-900 mt-2">
+      <pre className="mt-2 overflow-x-auto rounded-lg border border-slate-900 bg-slate-950 p-2.5 font-mono text-[10px] leading-tight text-slate-400">
         {hunk}
       </pre>
     );
@@ -164,76 +166,68 @@ export default function PullRequestList({ repositoryId }: PullRequestListProps) 
 
   if (loading && pulls.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/30">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+      <div className="flex h-64 items-center justify-center rounded-xl border border-border bg-secondary/30">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {/* State filters */}
-      <div className="flex items-center gap-2">
-        {["all", "open", "closed", "merged"].map((state) => (
-          <button
-            key={state}
-            onClick={() => {
-              setStateFilter(state);
-              setPage(1);
-            }}
-            className={`text-xs px-3.5 py-1.5 rounded-lg border font-semibold capitalize transition
-              ${stateFilter === state 
-                ? "bg-indigo-600 border-indigo-500 text-white" 
-                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-              }`}
-          >
-            {state} PRs
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={stateFilter}
+        onValueChange={(v) => {
+          setStateFilter(v);
+          setPage(1);
+        }}
+      >
+        <PillTabsList>
+          {["all", "open", "closed", "merged"].map((state) => (
+            <PillTabsTrigger key={state} value={state}>
+              {state} PRs
+            </PillTabsTrigger>
+          ))}
+        </PillTabsList>
+      </Tabs>
 
-      <div className="rounded-2xl border border-slate-850 bg-slate-900/20 p-5 shadow-lg space-y-4">
-        <h3 className="text-base font-semibold text-white flex items-center gap-2">
-          <GitPullRequest className="h-4.5 w-4.5 text-purple-400" />
+      <Card className="space-y-4 p-5">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
+          <GitPullRequest className="h-4.5 w-4.5 text-violet-500" />
           Pull Request Registry
         </h3>
 
         {pulls.length === 0 ? (
-          <div className="text-center py-8 text-slate-500 text-xs">No matching pull requests found.</div>
+          <EmptyState
+            icon={GitPullRequest}
+            title="No pull requests found"
+            description="No pull requests found for the selected filter."
+          />
         ) : (
-          <div className="divide-y divide-slate-850">
+          <div className="divide-y divide-border">
             {pulls.map((pr) => {
               const isExpanded = pr.id === expandedId;
 
               return (
-                <div key={pr.id} className="py-4 first:pt-0 last:pb-0 space-y-3">
+                <div key={pr.id} className="space-y-3 py-4 first:pt-0 last:pb-0">
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <img
-                        src={pr.authorAvatar || "https://github.com/identicons/git.png"}
-                        alt={pr.authorName}
-                        className="h-9 w-9 rounded-xl border border-slate-700 bg-slate-800 object-cover shrink-0"
-                      />
+                    <div className="flex min-w-0 items-start gap-3">
+                      <Avatar src={pr.authorAvatar} name={pr.authorName} size="md" className="mt-0.5" />
                       <div className="min-w-0">
-                        <div className="flex items-center flex-wrap gap-2">
-                          <p className="font-semibold text-sm text-slate-200 truncate pr-2">
-                            {pr.title}
-                          </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate pr-2 text-sm font-semibold text-foreground">{pr.title}</p>
                           {getStateBadge(pr)}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 mt-1">
-                          <span className="font-semibold text-indigo-400">#{pr.number}</span>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                          <span className="font-semibold text-primary">#{pr.number}</span>
                           <span>by</span>
-                          <span className="font-medium text-slate-400">{pr.authorName}</span>
+                          <span className="font-medium">{pr.authorName}</span>
                           <span>•</span>
-                          <span>
-                            {new Date(pr.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                          </span>
+                          <span>{new Date(pr.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
                           {pr.files && pr.files.length > 0 && (
                             <>
                               <span>•</span>
-                              <span className="text-[10px] text-slate-600 bg-slate-950 px-1.5 py-0.5 rounded font-mono">
+                              <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px]">
                                 {pr.files.length} changed files
                               </span>
                             </>
@@ -242,40 +236,39 @@ export default function PullRequestList({ repositoryId }: PullRequestListProps) 
                       </div>
                     </div>
 
-                    <button
+                    <IconButton
+                      aria-label={isExpanded ? "Collapse pull request" : "Expand pull request"}
+                      variant="solid"
                       onClick={() => toggleExpand(pr.id, pr.number)}
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white transition shrink-0
-                        ${isExpanded ? "border-purple-500 text-purple-400" : ""}`}
+                      className={cn("shrink-0", isExpanded && "border-violet-500 text-violet-500")}
                     >
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
+                    </IconButton>
                   </div>
 
-                  {/* Expanded Timeline & Files */}
                   {isExpanded && (
-                    <div className="pl-12 pt-2 border-t border-slate-850/60 mt-3 space-y-4 animate-in fade-in duration-200">
+                    <div className="ml-12 mt-3 animate-in fade-in space-y-4 border-t border-border pt-3 duration-200">
                       {loadingDetails ? (
-                        <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
-                          <Loader2 className="h-4.5 w-4.5 animate-spin text-purple-400" />
+                        <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-4.5 w-4.5 animate-spin text-violet-500" />
                           <span>Loading PR review timeline...</span>
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {/* Changed Files list */}
                           {pr.files && pr.files.length > 0 && (
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                              <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                 <FileCode className="h-3.5 w-3.5" /> Changed Files ({pr.files.length})
                               </p>
                               <div className="grid gap-2 sm:grid-cols-2">
                                 {pr.files.map((file) => (
-                                  <div key={file.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-2.5 flex items-center justify-between">
-                                    <span className="text-xs font-mono text-slate-300 truncate max-w-[200px]" title={file.filename}>
+                                  <div key={file.id} className="flex items-center justify-between rounded-xl border border-border bg-secondary/30 p-2.5">
+                                    <span className="max-w-[200px] truncate font-mono text-xs text-foreground" title={file.filename}>
                                       {file.filename.split("/").pop()}
                                     </span>
-                                    <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 shrink-0">
-                                      <span className="text-emerald-450">+{file.additions}</span>
-                                      <span className="text-rose-450">-{file.deletions}</span>
+                                    <div className="flex shrink-0 items-center gap-2 font-mono text-[10px] text-muted-foreground">
+                                      <span className="text-emerald-600 dark:text-emerald-400">+{file.additions}</span>
+                                      <span className="text-rose-600 dark:text-rose-400">-{file.deletions}</span>
                                     </div>
                                   </div>
                                 ))}
@@ -283,73 +276,68 @@ export default function PullRequestList({ repositoryId }: PullRequestListProps) 
                             </div>
                           )}
 
-                          {/* Reviews and Timeline comments */}
                           <div className="space-y-3.5">
-                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                               <Eye className="h-3.5 w-3.5" /> Review Timeline ({reviews.length})
                             </p>
-                            
+
                             {reviews.length === 0 ? (
-                              <p className="text-xs text-slate-500 italic">No formal reviews recorded yet.</p>
+                              <p className="text-xs italic text-muted-foreground">No formal reviews recorded yet.</p>
                             ) : (
-                              <div className="relative border-l-2 border-slate-800 pl-4 space-y-4">
+                              <div className="relative space-y-4 border-l-2 border-border pl-4">
                                 {reviews.map((rev) => {
-                                  // Determine status badge color
-                                  let stateColor = "text-slate-400 bg-slate-900 border-slate-800";
-                                  if (rev.state === "APPROVED") stateColor = "text-emerald-450 bg-emerald-950/20 border-emerald-900/30";
-                                  else if (rev.state === "CHANGES_REQUESTED") stateColor = "text-rose-450 bg-rose-950/20 border-rose-900/30";
+                                  const isApproved = rev.state === "APPROVED";
+                                  const isChangesRequested = rev.state === "CHANGES_REQUESTED";
 
                                   return (
                                     <div key={rev.id} className="relative space-y-2">
-                                      {/* Indicator dot */}
-                                      <div className={`absolute -left-[21px] top-1 h-2 w-2 rounded-full border
-                                        ${rev.state === "APPROVED" ? "bg-emerald-500 border-emerald-400" : 
-                                          rev.state === "CHANGES_REQUESTED" ? "bg-rose-500 border-rose-450" : 
-                                          "bg-slate-700 border-slate-600"}`} 
+                                      <div
+                                        className={cn(
+                                          "absolute -left-[21px] top-1 h-2 w-2 rounded-full border",
+                                          isApproved
+                                            ? "bg-emerald-500 border-emerald-400"
+                                            : isChangesRequested
+                                            ? "bg-rose-500 border-rose-400"
+                                            : "bg-muted-foreground border-border"
+                                        )}
                                       />
 
-                                      <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                         <div className="flex items-center gap-2">
-                                          <img
-                                            src={rev.authorAvatar || "https://github.com/identicons/git.png"}
-                                            alt={rev.authorName}
-                                            className="h-6 w-6 rounded-lg bg-slate-800 border border-slate-700 object-cover"
-                                          />
-                                          <span className="font-semibold text-slate-300">{rev.authorName}</span>
-                                          <span className={`text-[10px] px-2 py-0.5 rounded border font-mono font-bold capitalize ${stateColor}`}>
+                                          <Avatar src={rev.authorAvatar} name={rev.authorName} size="xs" />
+                                          <span className="font-semibold text-foreground">{rev.authorName}</span>
+                                          <Badge variant={isApproved ? "success" : isChangesRequested ? "danger" : "secondary"}>
                                             {rev.state.replace("_", " ")}
-                                          </span>
+                                          </Badge>
                                         </div>
-                                        <span className="text-[10px] text-slate-500">
+                                        <span className="text-[10px] text-muted-foreground">
                                           {new Date(rev.submittedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                                         </span>
                                       </div>
 
                                       {rev.body && (
-                                        <p className="text-xs text-slate-400 bg-slate-950/30 border border-slate-850 p-2.5 rounded-xl">
+                                        <p className="rounded-xl border border-border bg-secondary/30 p-2.5 text-xs text-foreground">
                                           {rev.body}
                                         </p>
                                       )}
 
-                                      {/* Inline Comments on Review */}
                                       {rev.comments && rev.comments.length > 0 && (
-                                        <div className="pl-3 space-y-2 mt-2">
+                                        <div className="mt-2 space-y-2 pl-3">
                                           {rev.comments.map((comm) => (
-                                            <div key={comm.id} className="rounded-xl border border-slate-850 bg-slate-900/10 p-3 space-y-2">
-                                              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                                                <span className="flex items-center gap-1 font-semibold text-slate-400">
-                                                  <MessageSquare className="h-3 w-3 text-indigo-400" />
-                                                  {comm.authorName} commented on <code className="bg-slate-950 text-[10px] px-1 rounded text-slate-300 font-mono">{comm.path.split("/").pop()}</code>
+                                            <div key={comm.id} className="space-y-2 rounded-xl border border-border bg-secondary/20 p-3">
+                                              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-muted-foreground">
+                                                <span className="flex items-center gap-1 font-semibold">
+                                                  <MessageSquare className="h-3 w-3 text-primary" />
+                                                  {comm.authorName} commented on{" "}
+                                                  <code className="rounded bg-secondary px-1 font-mono text-[10px] text-foreground">
+                                                    {comm.path.split("/").pop()}
+                                                  </code>
                                                   {comm.line && <span>:L{comm.line}</span>}
                                                 </span>
-                                                <span>
-                                                  {new Date(comm.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                                                </span>
+                                                <span>{new Date(comm.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
                                               </div>
 
-                                              <p className="text-xs text-slate-300">{comm.body}</p>
-                                              
-                                              {/* Diff hunk */}
+                                              <p className="text-xs text-foreground">{comm.body}</p>
                                               {renderDiffHunk(comm.diffHunk)}
                                             </div>
                                           ))}
@@ -371,29 +359,20 @@ export default function PullRequestList({ repositoryId }: PullRequestListProps) 
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4 border-t border-slate-850">
-            <button
-              onClick={() => fetchPulls(page - 1, stateFilter)}
-              disabled={page === 1 || loading}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 border border-slate-850 hover:bg-slate-800 text-slate-300 disabled:opacity-40 transition"
-            >
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <Button variant="outline" size="sm" onClick={() => fetchPulls(page - 1, stateFilter)} disabled={page === 1 || loading}>
               Previous
-            </button>
-            <span className="text-xs text-slate-500">
+            </Button>
+            <span className="text-xs text-muted-foreground">
               Page {page} of {totalPages}
             </span>
-            <button
-              onClick={() => fetchPulls(page + 1, stateFilter)}
-              disabled={page === totalPages || loading}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 border border-slate-850 hover:bg-slate-800 text-slate-300 disabled:opacity-40 transition"
-            >
+            <Button variant="outline" size="sm" onClick={() => fetchPulls(page + 1, stateFilter)} disabled={page === totalPages || loading}>
               Next
-            </button>
+            </Button>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

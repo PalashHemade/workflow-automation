@@ -15,6 +15,25 @@ import WebhookEventLog from "./WebhookEventLog";
 import RepoSettings from "./RepoSettings";
 import SyncHistory from "./SyncHistory";
 import ThemeToggle from "./ThemeToggle";
+import { GitInsightLogo, GitInsightMark } from "./GitInsightLogo";
+
+import { SidebarContainer, SidebarNavItem, SidebarSection } from "@/components/ui/Sidebar";
+import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Avatar, AvatarStack } from "@/components/ui/Avatar";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PillTabsList, PillTabsTrigger, Tabs, TabsContent } from "@/components/ui/Tabs";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
+import {
+  Dropdown,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem,
+  DropdownSeparator,
+} from "@/components/ui/Dropdown";
 
 import {
   Layers,
@@ -22,22 +41,43 @@ import {
   LogOut,
   Loader2,
   BarChart2,
-  GitCommit,
-  GitPullRequest,
-  Terminal,
   Settings,
-  History,
   Clock,
   Plus,
   Sparkles,
   BookOpen,
   Link2,
   ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
   RefreshCw,
+  PanelLeftClose,
+  PanelLeftOpen,
+  UserPlus,
+  ChevronDown,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+
+type TabType =
+  | "overview"
+  | "repository"
+  | "jira"
+  | "timeline"
+  | "analytics"
+  | "modules"
+  | "ai_insights"
+  | "integrations"
+  | "settings";
+
+const NAV_ITEMS: { id: TabType; label: string; icon: any }[] = [
+  { id: "overview", label: "Overview", icon: Layers },
+  { id: "repository", label: "Repository", icon: GitBranch },
+  { id: "jira", label: "Jira", icon: Link2 },
+  { id: "timeline", label: "Timeline", icon: Clock },
+  { id: "analytics", label: "Analytics", icon: BarChart2 },
+  { id: "modules", label: "Modules", icon: BookOpen },
+  { id: "ai_insights", label: "AI Insights", icon: Sparkles },
+  { id: "integrations", label: "Integrations", icon: ShieldCheck },
+  { id: "settings", label: "Settings", icon: Settings },
+];
 
 export default function DashboardOverview() {
   const { data: session } = useSession();
@@ -49,13 +89,10 @@ export default function DashboardOverview() {
   const [loadingProjectDetails, setLoadingProjectDetails] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Requested Tabs: Overview | GitHub | Jira | Timeline | Analytics | Knowledge | AI Insights | Integrations | Settings
-  type TabType = "overview" | "github" | "jira" | "timeline" | "analytics" | "knowledge" | "ai_insights" | "integrations" | "settings";
   const [activeTab, setActiveTab] = useState<TabType>("overview");
-
-  // Sub-tabs for GitHub: commits | pulls | branches | webhooks | history
-  const [githubSubTab, setGithubSubTab] = useState<"overview" | "commits" | "pulls" | "branches" | "webhooks" | "history">("overview");
+  const [repoSubTab, setRepoSubTab] = useState<"overview" | "commits" | "pulls" | "branches" | "webhooks" | "history">("overview");
 
   useEffect(() => {
     fetchProjects();
@@ -96,7 +133,6 @@ export default function DashboardOverview() {
         const data = await res.json();
         setSelectedProject(data.project);
 
-        // Fetch repository metrics for GitHub tab compatibility
         if (data.project?.repositoryId) {
           const mRes = await fetch(`/api/metrics?repositoryId=${data.project.repositoryId}`);
           if (mRes.ok) {
@@ -129,341 +165,365 @@ export default function DashboardOverview() {
 
   if (loadingProjects) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#020617] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-600 dark:text-indigo-400 mx-auto" />
-          <p className="text-xs text-slate-500 font-semibold">Loading Engineering Projects...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="space-y-3 text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <p className="text-xs font-semibold text-muted-foreground">Loading Engineering Projects...</p>
         </div>
       </div>
     );
   }
 
+  const members: any[] = selectedProject?.members || [];
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
-      {/* Top Header Navigation */}
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-black text-sm shadow-md">
-                <Layers className="h-4.5 w-4.5" />
+    <TooltipProvider delayDuration={200}>
+      <div className="flex h-screen overflow-hidden bg-background text-foreground">
+        {/* Sidebar */}
+        <SidebarContainer collapsed={sidebarCollapsed} className="hidden md:flex">
+          <div className={`flex h-16 items-center border-b border-border px-4 ${sidebarCollapsed ? "justify-center px-0" : "justify-between"}`}>
+            <GitInsightLogo showWordmark={!sidebarCollapsed} />
+          </div>
+
+          <nav className="flex-1 overflow-y-auto py-3">
+            {selectedProject && (
+              <SidebarSection>
+                {NAV_ITEMS.map((item) => (
+                  <SidebarNavItem
+                    key={item.id}
+                    icon={item.icon}
+                    label={item.label}
+                    active={activeTab === item.id}
+                    collapsed={sidebarCollapsed}
+                    onClick={() => setActiveTab(item.id)}
+                  />
+                ))}
+              </SidebarSection>
+            )}
+          </nav>
+
+          <div className="border-t border-border p-2">
+            <IconButton
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="w-full"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </IconButton>
+          </div>
+        </SidebarContainer>
+
+        {/* Main column */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Top bar */}
+          <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-card/60 px-4 backdrop-blur-md sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="md:hidden">
+                <GitInsightLogo showWordmark={false} />
               </div>
-              <span className="font-extrabold text-base tracking-tight text-slate-950 dark:text-white">
-                GitInsight <span className="text-xs text-indigo-500 font-bold ml-1">Phase 5</span>
-              </span>
+              {projects.length > 0 && (
+                <Dropdown>
+                  <DropdownTrigger asChild>
+                    <button className="flex max-w-[220px] items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground sm:max-w-xs">
+                      <span className="truncate">
+                        {projects.find((p) => p.id === selectedProjectId)?.name ?? "Select project"}
+                      </span>
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                  </DropdownTrigger>
+                  <DropdownContent align="start" className="min-w-[220px]">
+                    {projects.map((p) => (
+                      <DropdownItem key={p.id} onSelect={() => setSelectedProjectId(p.id)}>
+                        <div className="flex flex-col">
+                          <span className="font-semibold">{p.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{p.repository?.fullName || "No repository"}</span>
+                        </div>
+                      </DropdownItem>
+                    ))}
+                    <DropdownSeparator />
+                    <DropdownItem onSelect={() => setShowWizard(true)}>
+                      <Plus className="h-3.5 w-3.5" /> New project
+                    </DropdownItem>
+                  </DropdownContent>
+                </Dropdown>
+              )}
+              {projects.length === 0 && (
+                <Button size="sm" onClick={() => setShowWizard(true)}>
+                  <Plus className="h-3.5 w-3.5" /> New Project
+                </Button>
+              )}
             </div>
 
-            {/* Project Selector Dropdown */}
-            {projects.length > 0 && (
-              <div className="relative">
-                <select
-                  value={selectedProjectId || ""}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.repository?.fullName || "No Repo"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {selectedProject && (
+                <Button variant="outline" size="sm" onClick={handleManualSync} disabled={syncing}>
+                  <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin text-primary" : ""}`} />
+                  <span className="hidden sm:inline">{syncing ? "Syncing..." : "Re-Sync"}</span>
+                </Button>
+              )}
+              <ThemeToggle />
+              <Dropdown>
+                <DropdownTrigger asChild>
+                  <button className="flex items-center gap-2 rounded-lg border border-border bg-card p-1 pr-2 hover:bg-accent">
+                    <Avatar src={session?.user?.image} name={session?.user?.name} size="sm" />
+                    {session?.user?.name && (
+                      <span className="hidden text-xs font-semibold sm:inline">{session.user.name}</span>
+                    )}
+                  </button>
+                </DropdownTrigger>
+                <DropdownContent align="end" className="min-w-[200px]">
+                  {session?.user && (
+                    <>
+                      <div className="px-2.5 py-1.5">
+                        <p className="text-xs font-bold text-foreground">{session.user.name}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">{session.user.email}</p>
+                      </div>
+                      <DropdownSeparator />
+                    </>
+                  )}
+                  <DropdownItem destructive onSelect={() => signOut({ callbackUrl: "/" })}>
+                    <LogOut className="h-3.5 w-3.5" /> Sign out
+                  </DropdownItem>
+                </DropdownContent>
+              </Dropdown>
+            </div>
+          </header>
 
-            <button
-              onClick={() => setShowWizard(true)}
-              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" /> New Project
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {selectedProject && (
-              <button
-                onClick={handleManualSync}
-                disabled={syncing}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1.5"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin text-indigo-500" : ""}`} />
-                {syncing ? "Syncing..." : "Re-Sync All"}
-              </button>
-            )}
-            <ThemeToggle />
-            
-            {/* User Profile */}
-            {session?.user && (
-              <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm ml-2">
-                <div className="flex flex-col items-end">
-                  <span className="text-sm font-bold leading-none text-slate-900 dark:text-white">{session.user.name}</span>
-                  <span className="text-xs text-slate-500 mt-1">{session.user.email}</span>
-                </div>
-                {session.user.image ? (
-                  <img src={session.user.image} alt={session.user.name || "User"} className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">
-                    {session.user.name?.charAt(0) || "U"}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="p-2 ml-2 rounded-xl text-slate-400 hover:text-red-500 dark:hover:text-red-400 bg-slate-100 hover:bg-red-50 dark:bg-slate-900 dark:hover:bg-red-950/30 transition-colors shadow-sm"
-              title="Sign Out"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        {selectedProject && (
-          <div className="max-w-7xl mx-auto px-6 flex items-center gap-1 overflow-x-auto text-xs font-semibold border-t border-slate-200/60 dark:border-slate-800/60">
-            {[
-              { id: "overview", label: "Overview", icon: Layers },
-              { id: "github", label: "GitHub", icon: GitBranch },
-              { id: "jira", label: "Jira", icon: Link2 },
-              { id: "timeline", label: "Timeline", icon: Clock },
-              { id: "analytics", label: "Analytics", icon: BarChart2 },
-              { id: "knowledge", label: "Knowledge", icon: BookOpen },
-              { id: "ai_insights", label: "AI Insights", icon: Sparkles },
-              { id: "integrations", label: "Integrations", icon: ShieldCheck },
-              { id: "settings", label: "Settings", icon: Settings },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
+          {/* Mobile tab bar (sidebar becomes a horizontal scroller below md) */}
+          {selectedProject && (
+            <div className="flex items-center gap-1 overflow-x-auto border-b border-border px-3 py-2 md:hidden">
+              {NAV_ITEMS.map((item) => (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as TabType)}
-                  className={`px-4 py-3 border-b-2 flex items-center gap-2 whitespace-nowrap transition-colors ${
-                    isActive
-                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold"
-                      : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                    activeTab === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
+                  <item.icon className="h-3.5 w-3.5" />
+                  {item.label}
                 </button>
-              );
-            })}
-          </div>
-        )}
-      </header>
-
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-        {/* Wizard Modal Overlay */}
-        {showWizard && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <ProjectWizard
-              onSuccess={(newProject) => {
-                setShowWizard(false);
-                fetchProjects();
-                setSelectedProjectId(newProject.id);
-              }}
-              onCancel={() => setShowWizard(false)}
-            />
-          </div>
-        )}
-
-        {/* Empty State when no projects exist */}
-        {projects.length === 0 && !showWizard && (
-          <div className="max-w-md mx-auto my-16 text-center space-y-4 bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl">
-            <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
-              <Layers className="h-6 w-6" />
+              ))}
             </div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">No Engineering Projects</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Create an Engineering Project abstraction to connect a GitHub repository with Jira software, Jenkins, Slack, and AI insights.
-            </p>
-            <button
-              onClick={() => setShowWizard(true)}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg transition-colors inline-flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" /> Launch Project Wizard
-            </button>
-          </div>
-        )}
+          )}
 
-        {/* Active Selected Project Content */}
-        {selectedProject && (
-          <>
-            {/* OVERVIEW TAB */}
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                {/* Project Header Banner */}
-                <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                      <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{selectedProject.name}</h1>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase ${
-                        selectedProject.syncStatus === "SUCCESS" ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
-                      }`}>
-                        {selectedProject.syncStatus}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 max-w-2xl">{selectedProject.description || "Engineering project combining GitHub code activity and Jira agile tracking."}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <div>GitHub: <strong className="text-indigo-600 dark:text-indigo-400">{selectedProject.repository?.fullName}</strong></div>
-                    <div>•</div>
-                    <div>Jira: <strong className="text-purple-600 dark:text-purple-400">{selectedProject.stories?.length || 0} Stories</strong></div>
-                  </div>
-                </div>
+          {/* Content */}
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {showWizard && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 p-4 backdrop-blur-sm">
+                <ProjectWizard
+                  onSuccess={(newProject) => {
+                    setShowWizard(false);
+                    fetchProjects();
+                    setSelectedProjectId(newProject.id);
+                  }}
+                  onCancel={() => setShowWizard(false)}
+                />
+              </div>
+            )}
 
-                {/* Dashboard Metrics Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Sprint Velocity</span>
-                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 block">{selectedProject.metrics?.sprintVelocity || 85.4}%</span>
-                    <span className="text-xs text-slate-500">Active sprint completion rate</span>
-                  </div>
-                  <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Open Stories / Bugs</span>
-                    <span className="text-2xl font-black text-amber-500 block">{selectedProject.stories?.length || 0}</span>
-                    <span className="text-xs text-slate-500">Synchronized Jira items</span>
-                  </div>
-                  <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Recent Commits</span>
-                    <span className="text-2xl font-black text-purple-600 dark:text-purple-400 block">{selectedProject.repository?.commits?.length || 0}</span>
-                    <span className="text-xs text-slate-500">Code additions tracked</span>
-                  </div>
-                  <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider block">Project Risk Score</span>
-                    <span className="text-2xl font-black text-emerald-500 block">{selectedProject.metrics?.riskScore || 8.5}/100</span>
-                    <span className="text-xs text-slate-500">Low architectural risk</span>
-                  </div>
-                </div>
+            {projects.length === 0 && !showWizard && (
+              <div className="mx-auto mt-16 max-w-md">
+                <EmptyState
+                  icon={Layers}
+                  title="No Engineering Projects"
+                  description="Create an Engineering Project to connect a GitHub repository with Jira, and start building a shared, live picture of the project with your team."
+                  action={
+                    <Button onClick={() => setShowWizard(true)}>
+                      <Plus className="h-4 w-4" /> Launch Project Wizard
+                    </Button>
+                  }
+                />
+              </div>
+            )}
 
-                {/* Sub-components Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Jira Quick View */}
-                  <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 space-y-3 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Link2 className="h-4 w-4 text-purple-500" />
-                        Jira Agile Overview
-                      </h3>
-                      <button onClick={() => setActiveTab("jira")} className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline">View All →</button>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      {selectedProject.stories?.slice(0, 4).map((story: any) => (
-                        <div key={story.id} className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex justify-between">
-                          <span>[{story.key}] {story.summary}</span>
-                          <span className="font-bold text-purple-600">{story.status}</span>
+            {selectedProject && (
+              <>
+                {activeTab === "overview" && (
+                  <div className="space-y-6">
+                    {/* Project header banner */}
+                    <Card className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h1 className="text-xl font-black tracking-tight text-foreground sm:text-2xl">
+                            {selectedProject.name}
+                          </h1>
+                          <StatusBadge status={selectedProject.syncStatus} />
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* GitHub Quick View */}
-                  <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 space-y-3 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <GitBranch className="h-4 w-4 text-indigo-500" />
-                        Recent Repository Commits
-                      </h3>
-                      <button onClick={() => setActiveTab("github")} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">View All →</button>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      {selectedProject.repository?.commits?.slice(0, 4).map((commit: any) => (
-                        <div key={commit.id} className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex justify-between">
-                          <span className="font-mono text-indigo-600">{commit.sha.slice(0, 7)} - {commit.message.slice(0, 40)}</span>
-                          <span className="text-slate-400">{new Date(commit.committedAt).toLocaleDateString()}</span>
+                        <p className="max-w-2xl text-xs text-muted-foreground">
+                          {selectedProject.description ||
+                            "Engineering project combining GitHub code activity and Jira agile tracking."}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
+                          <span>
+                            GitHub: <strong className="text-primary">{selectedProject.repository?.fullName}</strong>
+                          </span>
+                          <span className="text-border">•</span>
+                          <span>
+                            Jira: <strong className="text-violet-600 dark:text-violet-400">{selectedProject.stories?.length || 0} Stories</strong>
+                          </span>
                         </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {members.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <AvatarStack
+                              people={members.map((m: any) => ({ src: m.user?.image, name: m.user?.name || m.githubUsername }))}
+                            />
+                          </div>
+                        )}
+                        <SimpleTooltip label="Team invites are coming soon">
+                          <span>
+                            <Button variant="outline" size="sm" disabled>
+                              <UserPlus className="h-3.5 w-3.5" /> Invite
+                            </Button>
+                          </span>
+                        </SimpleTooltip>
+                      </div>
+                    </Card>
+
+                    {/* KPI grid */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <MetricCard label="Sprint Velocity" value={`${selectedProject.metrics?.sprintVelocity || 85.4}%`} trendLabel="Active sprint completion rate" />
+                      <MetricCard label="Open Stories / Bugs" value={selectedProject.stories?.length || 0} trendLabel="Synchronized Jira items" />
+                      <MetricCard label="Recent Commits" value={selectedProject.repository?.commits?.length || 0} trendLabel="Code additions tracked" />
+                      <MetricCard label="Project Risk Score" value={`${selectedProject.metrics?.riskScore || 8.5}/100`} trendLabel="Low architectural risk" />
+                    </div>
+
+                    {/* Quick views */}
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <Card className="space-y-3 p-5">
+                        <div className="flex items-center justify-between">
+                          <h3 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                            <Link2 className="h-4 w-4 text-violet-500" /> Jira Agile Overview
+                          </h3>
+                          <button onClick={() => setActiveTab("jira")} className="text-xs font-semibold text-violet-600 hover:underline dark:text-violet-400">
+                            View All →
+                          </button>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                          {selectedProject.stories?.slice(0, 4).map((story: any) => (
+                            <div key={story.id} className="flex justify-between rounded-lg border border-border bg-secondary/50 p-2.5">
+                              <span className="truncate pr-2">
+                                [{story.key}] {story.summary}
+                              </span>
+                              <span className="shrink-0 font-bold text-violet-600 dark:text-violet-400">{story.status}</span>
+                            </div>
+                          ))}
+                          {(!selectedProject.stories || selectedProject.stories.length === 0) && (
+                            <p className="py-2 text-center text-muted-foreground">No Jira stories synced yet.</p>
+                          )}
+                        </div>
+                      </Card>
+
+                      <Card className="space-y-3 p-5">
+                        <div className="flex items-center justify-between">
+                          <h3 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                            <GitBranch className="h-4 w-4 text-primary" /> Recent Repository Commits
+                          </h3>
+                          <button onClick={() => setActiveTab("repository")} className="text-xs font-semibold text-primary hover:underline">
+                            View All →
+                          </button>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                          {selectedProject.repository?.commits?.slice(0, 4).map((commit: any) => (
+                            <div key={commit.id} className="flex justify-between rounded-lg border border-border bg-secondary/50 p-2.5">
+                              <span className="truncate pr-2 font-mono text-primary">
+                                {commit.sha.slice(0, 7)} - {commit.message.slice(0, 40)}
+                              </span>
+                              <span className="shrink-0 text-muted-foreground">{new Date(commit.committedAt).toLocaleDateString()}</span>
+                            </div>
+                          ))}
+                          {(!selectedProject.repository?.commits || selectedProject.repository.commits.length === 0) && (
+                            <p className="py-2 text-center text-muted-foreground">No commits synced yet.</p>
+                          )}
+                        </div>
+                      </Card>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "repository" && (
+                  <Tabs value={repoSubTab} onValueChange={(v) => setRepoSubTab(v as any)} className="space-y-6">
+                    <PillTabsList>
+                      {(["overview", "commits", "pulls", "branches", "webhooks", "history"] as const).map((sub) => (
+                        <PillTabsTrigger key={sub} value={sub}>
+                          {sub}
+                        </PillTabsTrigger>
                       ))}
-                    </div>
+                    </PillTabsList>
+
+                    <TabsContent value="overview">
+                      {metricsData && <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedProject.repositoryId} />}
+                    </TabsContent>
+                    <TabsContent value="commits">
+                      {selectedProject.repositoryId && <CommitList repositoryId={selectedProject.repositoryId} />}
+                    </TabsContent>
+                    <TabsContent value="pulls">
+                      {selectedProject.repositoryId && <PullRequestList repositoryId={selectedProject.repositoryId} />}
+                    </TabsContent>
+                    <TabsContent value="branches">
+                      {selectedProject.repositoryId && <BranchList repositoryId={selectedProject.repositoryId} />}
+                    </TabsContent>
+                    <TabsContent value="webhooks">
+                      {selectedProject.repositoryId && <WebhookEventLog repositoryId={selectedProject.repositoryId} />}
+                    </TabsContent>
+                    <TabsContent value="history">
+                      {selectedProject.repositoryId && <SyncHistory />}
+                    </TabsContent>
+                  </Tabs>
+                )}
+
+                {activeTab === "jira" && (
+                  <JiraDashboard project={selectedProject} onRefresh={() => fetchProjectDetails(selectedProject.id)} />
+                )}
+
+                {activeTab === "timeline" && <UnifiedTimeline projectId={selectedProject.id} />}
+
+                {activeTab === "analytics" && (
+                  <div className="space-y-6">
+                    {metricsData && <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedProject.repositoryId} />}
+                    <Card className="space-y-4 p-6">
+                      <h3 className="text-sm font-bold text-foreground">DORA Metrics & Velocity</h3>
+                      <div className="grid grid-cols-1 gap-4 text-center text-xs sm:grid-cols-4">
+                        <div className="rounded-xl border border-border bg-secondary/50 p-4">
+                          <span className="mb-1 block text-muted-foreground">Deployment Frequency</span>
+                          <span className="text-xl font-extrabold text-primary">{selectedProject.metrics?.deploymentFrequency || 3.2}/day</span>
+                        </div>
+                        <div className="rounded-xl border border-border bg-secondary/50 p-4">
+                          <span className="mb-1 block text-muted-foreground">Change Failure Rate</span>
+                          <span className="text-xl font-extrabold text-emerald-500">{selectedProject.metrics?.changeFailureRate || 1.5}%</span>
+                        </div>
+                        <div className="rounded-xl border border-border bg-secondary/50 p-4">
+                          <span className="mb-1 block text-muted-foreground">Mean Time to Recover</span>
+                          <span className="text-xl font-extrabold text-violet-500">{selectedProject.metrics?.mttr || 0.8} hours</span>
+                        </div>
+                        <div className="rounded-xl border border-border bg-secondary/50 p-4">
+                          <span className="mb-1 block text-muted-foreground">Lead Time for Changes</span>
+                          <span className="text-xl font-extrabold text-amber-500">{selectedProject.metrics?.leadTime || 14.2} hours</span>
+                        </div>
+                      </div>
+                    </Card>
                   </div>
-                </div>
-              </div>
+                )}
+
+                {activeTab === "modules" && <KnowledgeView projectId={selectedProject.id} />}
+                {activeTab === "ai_insights" && <AIInsightsView projectId={selectedProject.id} />}
+                {activeTab === "integrations" && <IntegrationsView projectId={selectedProject.id} />}
+                {activeTab === "settings" && selectedProject.repositoryId && (
+                  <RepoSettings
+                    repositoryId={selectedProject.repositoryId}
+                    onRefreshRepos={fetchProjects}
+                    onSelectTab={() => {}}
+                    onDeleteRepo={fetchProjects}
+                  />
+                )}
+              </>
             )}
-
-            {/* GITHUB TAB */}
-            {activeTab === "github" && (
-              <div className="space-y-6">
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 text-xs font-semibold">
-                  {["overview", "commits", "pulls", "branches", "webhooks", "history"].map((sub) => (
-                    <button
-                      key={sub}
-                      onClick={() => setGithubSubTab(sub as any)}
-                      className={`px-3 py-1.5 rounded-lg capitalize transition-colors ${
-                        githubSubTab === sub ? "bg-indigo-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                      }`}
-                    >
-                      {sub}
-                    </button>
-                  ))}
-                </div>
-
-                {githubSubTab === "overview" && metricsData && <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedProject.repositoryId} />}
-                {githubSubTab === "commits" && selectedProject.repositoryId && <CommitList repositoryId={selectedProject.repositoryId} />}
-                {githubSubTab === "pulls" && selectedProject.repositoryId && <PullRequestList repositoryId={selectedProject.repositoryId} />}
-                {githubSubTab === "branches" && selectedProject.repositoryId && <BranchList repositoryId={selectedProject.repositoryId} />}
-                {githubSubTab === "webhooks" && selectedProject.repositoryId && <WebhookEventLog repositoryId={selectedProject.repositoryId} />}
-                {githubSubTab === "history" && selectedProject.repositoryId && <SyncHistory />}
-              </div>
-            )}
-
-            {/* JIRA TAB */}
-            {activeTab === "jira" && (
-              <JiraDashboard project={selectedProject} onRefresh={() => fetchProjectDetails(selectedProject.id)} />
-            )}
-
-            {/* TIMELINE TAB */}
-            {activeTab === "timeline" && <UnifiedTimeline projectId={selectedProject.id} />}
-
-            {/* ANALYTICS TAB */}
-            {activeTab === "analytics" && (
-              <div className="space-y-6">
-                {metricsData && <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedProject.repositoryId} />}
-                <div className="p-6 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">DORA Metrics & Velocity Providers</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-center text-xs">
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                      <span className="text-slate-400 block mb-1">Deployment Frequency</span>
-                      <span className="text-xl font-extrabold text-indigo-500">{selectedProject.metrics?.deploymentFrequency || 3.2}/day</span>
-                    </div>
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                      <span className="text-slate-400 block mb-1">Change Failure Rate</span>
-                      <span className="text-xl font-extrabold text-emerald-500">{selectedProject.metrics?.changeFailureRate || 1.5}%</span>
-                    </div>
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                      <span className="text-slate-400 block mb-1">Mean Time to Recover (MTTR)</span>
-                      <span className="text-xl font-extrabold text-purple-500">{selectedProject.metrics?.mttr || 0.8} hours</span>
-                    </div>
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                      <span className="text-slate-400 block mb-1">Lead Time for Changes</span>
-                      <span className="text-xl font-extrabold text-amber-500">{selectedProject.metrics?.leadTime || 14.2} hours</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* KNOWLEDGE TAB */}
-            {activeTab === "knowledge" && <KnowledgeView projectId={selectedProject.id} />}
-
-            {/* AI INSIGHTS TAB */}
-            {activeTab === "ai_insights" && <AIInsightsView projectId={selectedProject.id} />}
-
-            {/* INTEGRATIONS TAB */}
-            {activeTab === "integrations" && <IntegrationsView projectId={selectedProject.id} />}
-
-            {/* SETTINGS TAB */}
-            {activeTab === "settings" && selectedProject.repositoryId && (
-              <RepoSettings
-                repositoryId={selectedProject.repositoryId}
-                onRefreshRepos={fetchProjects}
-                onSelectTab={() => {}}
-                onDeleteRepo={fetchProjects}
-              />
-            )}
-          </>
-        )}
-      </main>
-    </div>
+          </main>
+        </div>
+      </div>
+    </TooltipProvider>
   );
 }

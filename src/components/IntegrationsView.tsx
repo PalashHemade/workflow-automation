@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { GitBranch, Layers, Cpu, MessageSquare, ShieldCheck, Plus, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
+import { GitBranch, Layers, Cpu, MessageSquare, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
+import { cn } from "@/lib/core/utils";
 
 interface IntegrationsViewProps {
   projectId: string;
@@ -39,61 +44,66 @@ export default function IntegrationsView({ projectId }: IntegrationsViewProps) {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-sm">
-        <div className="flex items-center justify-between">
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-6">
+        <Card className="space-y-4 p-6">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Plug-and-Play Integrations Hub</h3>
-            <p className="text-xs text-slate-500">Connect third-party developer tool providers directly to this Engineering Project.</p>
+            <h3 className="text-base font-bold text-foreground">Plug-and-Play Integrations Hub</h3>
+            <p className="text-xs text-muted-foreground">Connect third-party developer tool providers directly to this Engineering Project.</p>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {availableProviders.map((prov) => {
-            const Icon = prov.icon;
-            const existing = integrations.find((i) => i.provider === prov.name);
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {availableProviders.map((prov) => {
+              const Icon = prov.icon;
+              const existing = integrations.find((i) => i.provider === prov.name);
 
-            return (
-              <div
-                key={prov.name}
-                className={`p-5 rounded-xl border transition-all ${
-                  prov.connected
-                    ? "bg-slate-50/80 dark:bg-slate-950/80 border-indigo-500/30"
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-200">
-                      <Icon className="h-5 w-5" />
+              return (
+                <div
+                  key={prov.name}
+                  className={cn(
+                    "rounded-xl border p-5 transition-all",
+                    prov.connected ? "border-primary/30 bg-secondary/40" : "border-border bg-card"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-foreground">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground">{prov.title}</h4>
+                        <p className="text-xs text-muted-foreground">{prov.description}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">{prov.title}</h4>
-                      <p className="text-xs text-slate-500">{prov.description}</p>
-                    </div>
+                    {prov.connected ? (
+                      <Badge variant="success">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Connected
+                      </Badge>
+                    ) : (
+                      <SimpleTooltip label="Third-party integrations are coming soon">
+                        <span>
+                          <Button size="sm" disabled>
+                            Connect
+                          </Button>
+                        </span>
+                      </SimpleTooltip>
+                    )}
                   </div>
-                  {prov.connected ? (
-                    <span className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 text-xs font-bold flex items-center gap-1">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Connected
-                    </span>
-                  ) : (
-                    <button className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">
-                      Connect
-                    </button>
+
+                  {existing && (
+                    <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-[11px] text-muted-foreground">
+                      <span>
+                        Status: <strong className="text-emerald-600 dark:text-emerald-400">{existing.status}</strong>
+                      </span>
+                      <span>Last Sync: {existing.lastSyncAt ? new Date(existing.lastSyncAt).toLocaleString() : "Never"}</span>
+                    </div>
                   )}
                 </div>
-
-                {existing && (
-                  <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-                    <span>Status: <strong className="text-emerald-500">{existing.status}</strong></span>
-                    <span>Last Sync: {existing.lastSyncAt ? new Date(existing.lastSyncAt).toLocaleString() : "Never"}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </Card>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
