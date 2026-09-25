@@ -1,12 +1,14 @@
 import { db } from "@/lib/core/db";
-import { EngineeringProject, ProjectKnowledge, ModuleKnowledge } from "@prisma/client";
+import { ProjectKnowledge, ModuleKnowledge } from "@prisma/client";
 
-export class ProjectRepository {
-  async getProjectById(projectId: string): Promise<EngineeringProject | null> {
+export class EngineeringProjectRepository {
+  async getProjectById(projectId: string) {
     return db.engineeringProject.findUnique({
       where: { id: projectId },
       include: {
-        repository: true,
+        repositories: {
+          include: { repository: true },
+        },
       },
     });
   }

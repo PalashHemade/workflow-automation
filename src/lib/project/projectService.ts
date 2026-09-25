@@ -22,6 +22,17 @@ export interface CreateProjectWizardInput {
   jiraRefreshToken?: string;
 }
 
+/**
+ * A project's repositories, ordered so the primary one is always first —
+ * shared shape between listEngineeringProjects/getEngineeringProjectById.
+ */
+export function getPrimaryRepository<T extends { isPrimary: boolean; repository: any }>(
+  project: { repositories: T[] } | null | undefined
+) {
+  if (!project) return null;
+  return project.repositories.find((r) => r.isPrimary)?.repository ?? project.repositories[0]?.repository ?? null;
+}
+
 export async function createEngineeringProject(input: CreateProjectWizardInput) {
   const {
     name,
@@ -40,17 +51,18 @@ export async function createEngineeringProject(input: CreateProjectWizardInput) 
   // 1. Transactional Creation / Update of EngineeringProject and Integrations
   const project = await db.$transaction(async (tx) => {
     // Check if an engineering project already exists for this repositoryId
-    const existing = await tx.engineeringProject.findUnique({
+    // (a repository can belong to at most one project, via ProjectRepository)
+    const existingLink = await tx.projectRepository.findUnique({
       where: { repositoryId },
     });
 
     let proj;
-    if (existing) {
+    if (existingLink) {
       proj = await tx.engineeringProject.update({
-        where: { id: existing.id },
+        where: { id: existingLink.engineeringProjectId },
         data: {
           name,
-          description: description || existing.description,
+          description,
           ownerId,
           primaryBranch,
           defaultBranch,
@@ -63,10 +75,16 @@ export async function createEngineeringProject(input: CreateProjectWizardInput) 
           name,
           description,
           ownerId,
-          repositoryId,
           primaryBranch,
           defaultBranch,
           syncStatus: "SYNCING",
+        },
+      });
+      await tx.projectRepository.create({
+        data: {
+          engineeringProjectId: proj.id,
+          repositoryId,
+          isPrimary: true,
         },
       });
     }
@@ -246,11 +264,63 @@ export async function createEngineeringProject(input: CreateProjectWizardInput) 
   return getEngineeringProjectById(project.id);
 }
 
+/**
+ * Attaches an additional repository to an existing project. A repository can
+ * belong to at most one project (ProjectRepository.repositoryId is unique).
+ */
+export async function addRepositoryToProject(projectId: string, repositoryId: string, label?: string) {
+  const existingLink = await db.projectRepository.findUnique({ where: { repositoryId } });
+  if (existingLink) {
+    throw new Error(
+      existingLink.engineeringProjectId === projectId
+        ? "This repository is already linked to this project."
+        : "This repository is already linked to a different project."
+    );
+  }
+
+  return db.projectRepository.create({
+    data: { engineeringProjectId: projectId, repositoryId, label, isPrimary: false },
+  });
+}
+
+/**
+ * Unlinks a repository from a project. The Repository row (and its commits/
+ * PRs/branches) is left intact — only the join row is removed. A project
+ * must always keep at least one repository; if the primary repo is removed,
+ * the next-oldest linked repo is promoted to primary.
+ */
+export async function removeRepositoryFromProject(projectId: string, repositoryId: string) {
+  const links = await db.projectRepository.findMany({
+    where: { engineeringProjectId: projectId },
+    orderBy: { addedAt: "asc" },
+  });
+
+  const target = links.find((l) => l.repositoryId === repositoryId);
+  if (!target) {
+    throw new Error("Repository is not linked to this project.");
+  }
+  if (links.length === 1) {
+    throw new Error("Cannot remove the last repository from a project.");
+  }
+
+  await db.projectRepository.delete({ where: { id: target.id } });
+
+  if (target.isPrimary) {
+    const next = links.find((l) => l.id !== target.id);
+    if (next) {
+      await db.projectRepository.update({ where: { id: next.id }, data: { isPrimary: true } });
+    }
+  }
+}
+
 export async function listEngineeringProjects(userId: string) {
   return db.engineeringProject.findMany({
     where: { ownerId: userId },
     include: {
-      repository: true,
+      repositories: {
+        include: { repository: true },
+        orderBy: { addedAt: "asc" },
+      },
       integrations: {
         include: { credentials: true },
       },
@@ -273,12 +343,17 @@ export async function getEngineeringProjectById(id: string) {
     where: { id },
     include: {
       owner: true,
-      repository: {
+      repositories: {
         include: {
-          commits: { take: 20, orderBy: { committedAt: "desc" } },
-          pullRequests: { take: 20, orderBy: { createdAt: "desc" } },
-          branches: true,
+          repository: {
+            include: {
+              commits: { take: 20, orderBy: { committedAt: "desc" } },
+              pullRequests: { take: 20, orderBy: { createdAt: "desc" } },
+              branches: true,
+            },
+          },
         },
+        orderBy: { addedAt: "asc" },
       },
       integrations: {
         include: { credentials: true },

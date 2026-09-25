@@ -4,7 +4,6 @@ model EngineeringProject {
   name            String
   description     String?
   ownerId         String
-  repositoryId    String               @unique
   primaryBranch   String               @default("main")
   defaultBranch   String               @default("main")
   archived        Boolean              @default(false)
@@ -14,7 +13,7 @@ model EngineeringProject {
   updatedAt       DateTime             @updatedAt
   aiInsights      AIInsight[]
   owner           User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  repository      Repository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  repositories    ProjectRepository[]
   epics           Epic[]
   tasks           JiraTask[]
   moduleKnowledge ModuleKnowledge[]
@@ -27,6 +26,24 @@ model EngineeringProject {
   sprints         Sprint[]
   stories         Story[]
   syncJobs        SyncJob[]
+}
+
+// Join table: one EngineeringProject can track multiple Repositories, but
+// each Repository belongs to at most one project (@@unique on repositoryId
+// below — this is 1:many, not many:many). Superseded the old direct 1:1
+// EngineeringProject.repositoryId FK, which is kept temporarily during
+// migration and removed once this table is backfilled.
+model ProjectRepository {
+  id                   String             @id @default(cuid())
+  engineeringProjectId String
+  repositoryId         String             @unique
+  label                String?
+  isPrimary            Boolean            @default(false)
+  addedAt              DateTime           @default(now())
+  engineeringProject   EngineeringProject @relation(fields: [engineeringProjectId], references: [id], onDelete: Cascade)
+  repository           Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([engineeringProjectId])
 }
 
 // Project Provider Integration Config & Sync State

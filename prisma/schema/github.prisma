@@ -29,7 +29,7 @@ model Repository {
   syncLogs                 BackgroundSyncLog[]
   branches                 Branch[]
   commits                  Commit[]
-  engineeringProject       EngineeringProject?
+  projectLink              ProjectRepository?
   projectEvents            ProjectEvent[]
   pullRequests             PullRequest[]
   user                     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)

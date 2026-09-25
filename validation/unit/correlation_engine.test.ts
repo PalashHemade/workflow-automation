@@ -46,7 +46,9 @@ export async function runCorrelationEngineUnitTests(): Promise<TestResult[]> {
       data: {
         name: "Test Correlation Project",
         ownerId: TEST_USER_ID,
-        repositoryId: repo.id,
+        repositories: {
+          create: { repositoryId: repo.id, isPrimary: true },
+        },
       },
     });
 

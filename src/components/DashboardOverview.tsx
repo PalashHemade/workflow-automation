@@ -15,6 +15,7 @@ import WebhookEventLog from "./WebhookEventLog";
 import RepoSettings from "./RepoSettings";
 import SyncHistory from "./SyncHistory";
 import ThemeToggle from "./ThemeToggle";
+import AddRepositoryModal from "./AddRepositoryModal";
 import { GitInsightLogo, GitInsightMark } from "./GitInsightLogo";
 
 import { SidebarContainer, SidebarNavItem, SidebarSection } from "@/components/ui/Sidebar";
@@ -23,6 +24,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Badge } from "@/components/ui/Badge";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PillTabsList, PillTabsTrigger, Tabs, TabsContent } from "@/components/ui/Tabs";
@@ -55,6 +57,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+import { cn } from "@/lib/core/utils";
 
 type TabType =
   | "overview"
@@ -79,6 +82,12 @@ const NAV_ITEMS: { id: TabType; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
+/** A project's linked repos, primary first — falls back to the first-added repo if none is flagged primary. */
+function getPrimaryRepoLink(repositories: any[] | undefined) {
+  if (!repositories || repositories.length === 0) return null;
+  return repositories.find((r) => r.isPrimary) ?? repositories[0];
+}
+
 export default function DashboardOverview() {
   const { data: session } = useSession();
   const [projects, setProjects] = useState<any[]>([]);
@@ -88,8 +97,10 @@ export default function DashboardOverview() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingProjectDetails, setLoadingProjectDetails] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [showAddRepoModal, setShowAddRepoModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [repoSubTab, setRepoSubTab] = useState<"overview" | "commits" | "pulls" | "branches" | "webhooks" | "history">("overview");
@@ -105,6 +116,14 @@ export default function DashboardOverview() {
       setSelectedProject(null);
     }
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedRepoId) return;
+    fetch(`/api/metrics?repositoryId=${selectedRepoId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((mData) => mData && setMetricsData(mData))
+      .catch((err) => console.error("Error loading repo metrics:", err));
+  }, [selectedRepoId]);
 
   const fetchProjects = async () => {
     setLoadingProjects(true);
@@ -133,13 +152,8 @@ export default function DashboardOverview() {
         const data = await res.json();
         setSelectedProject(data.project);
 
-        if (data.project?.repositoryId) {
-          const mRes = await fetch(`/api/metrics?repositoryId=${data.project.repositoryId}`);
-          if (mRes.ok) {
-            const mData = await mRes.json();
-            setMetricsData(mData);
-          }
-        }
+        const primaryRepoId = getPrimaryRepoLink(data.project?.repositories)?.repository?.id ?? null;
+        setSelectedRepoId(primaryRepoId);
       }
     } catch (err) {
       console.error("Error loading project details:", err);
@@ -175,6 +189,38 @@ export default function DashboardOverview() {
   }
 
   const members: any[] = selectedProject?.members || [];
+  const projectRepoLinks: any[] = selectedProject?.repositories || [];
+  const primaryRepo = getPrimaryRepoLink(projectRepoLinks)?.repository;
+  const extraProjectRepoCount = projectRepoLinks.length - 1;
+  const allProjectCommits = projectRepoLinks
+    .flatMap((link: any) => link.repository?.commits || [])
+    .sort((a: any, b: any) => new Date(b.committedAt).getTime() - new Date(a.committedAt).getTime());
+
+  const repoSwitcher = projectRepoLinks.length > 0 && (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      {projectRepoLinks.map((link: any) => (
+        <button
+          key={link.repositoryId}
+          onClick={() => setSelectedRepoId(link.repository.id)}
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+            selectedRepoId === link.repository.id
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:border-primary/30"
+          )}
+        >
+          <GitBranch className="h-3 w-3" />
+          {link.label || link.repository.name}
+        </button>
+      ))}
+      <button
+        onClick={() => setShowAddRepoModal(true)}
+        className="flex items-center gap-1 rounded-full border border-dashed border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+      >
+        <Plus className="h-3 w-3" /> Add repo
+      </button>
+    </div>
+  );
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -236,7 +282,9 @@ export default function DashboardOverview() {
                       <DropdownItem key={p.id} onSelect={() => setSelectedProjectId(p.id)}>
                         <div className="flex flex-col">
                           <span className="font-semibold">{p.name}</span>
-                          <span className="text-[10px] text-muted-foreground">{p.repository?.fullName || "No repository"}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {getPrimaryRepoLink(p.repositories)?.repository?.fullName || "No repository"}
+                          </span>
                         </div>
                       </DropdownItem>
                     ))}
@@ -322,6 +370,18 @@ export default function DashboardOverview() {
               </div>
             )}
 
+            {selectedProject && (
+              <AddRepositoryModal
+                open={showAddRepoModal}
+                onOpenChange={setShowAddRepoModal}
+                projectId={selectedProject.id}
+                onAdded={() => {
+                  fetchProjects();
+                  fetchProjectDetails(selectedProject.id);
+                }}
+              />
+            )}
+
             {projects.length === 0 && !showWizard && (
               <div className="mx-auto mt-16 max-w-md">
                 <EmptyState
@@ -341,6 +401,70 @@ export default function DashboardOverview() {
               <>
                 {activeTab === "overview" && (
                   <div className="space-y-6">
+                    {/* Your Projects — GitHub-style card grid */}
+                    <div>
+                      <div className="mb-3 flex items-center justify-between">
+                        <h2 className="text-sm font-bold text-foreground">Your Projects</h2>
+                        <Button size="sm" variant="outline" onClick={() => setShowWizard(true)}>
+                          <Plus className="h-3.5 w-3.5" /> New Project
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        {projects.map((p) => {
+                          const isActive = p.id === selectedProjectId;
+                          const jiraConnected = p.integrations?.some((i: any) => i.provider === "JIRA");
+                          const primaryRepo = getPrimaryRepoLink(p.repositories)?.repository;
+                          const extraRepoCount = (p.repositories?.length ?? 0) - 1;
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => setSelectedProjectId(p.id)}
+                              className={cn(
+                                "group flex flex-col gap-3 rounded-xl border bg-card p-5 text-left transition-all hover:shadow-md",
+                                isActive ? "border-primary/50 ring-1 ring-primary/30" : "border-border hover:border-primary/30"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                                    <BookOpen className="h-4 w-4" />
+                                  </div>
+                                  <span className="truncate text-sm font-semibold text-primary group-hover:underline">
+                                    {p.name}
+                                  </span>
+                                </div>
+                                <StatusBadge status={p.syncStatus} />
+                              </div>
+
+                              {p.description && (
+                                <p className="line-clamp-2 text-xs text-muted-foreground">{p.description}</p>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="h-2 w-2 rounded-full bg-sky-500" />
+                                  {primaryRepo?.fullName}
+                                  {extraRepoCount > 0 && <span className="text-muted-foreground/70">+{extraRepoCount} more</span>}
+                                </span>
+                                {p._count?.stories > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Layers className="h-3 w-3" /> {p._count.stories} stories
+                                  </span>
+                                )}
+                                {p._count?.sprints > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" /> {p._count.sprints} sprints
+                                  </span>
+                                )}
+                                {jiraConnected && <Badge variant="secondary">Jira connected</Badge>}
+                                {p.archived && <Badge variant="outline">Archived</Badge>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     {/* Project header banner */}
                     <Card className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-1">
@@ -356,7 +480,8 @@ export default function DashboardOverview() {
                         </p>
                         <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
                           <span>
-                            GitHub: <strong className="text-primary">{selectedProject.repository?.fullName}</strong>
+                            GitHub: <strong className="text-primary">{primaryRepo?.fullName}</strong>
+                            {extraProjectRepoCount > 0 && <span> +{extraProjectRepoCount} more repo{extraProjectRepoCount > 1 ? "s" : ""}</span>}
                           </span>
                           <span className="text-border">•</span>
                           <span>
@@ -387,7 +512,7 @@ export default function DashboardOverview() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                       <MetricCard label="Sprint Velocity" value={`${selectedProject.metrics?.sprintVelocity || 85.4}%`} trendLabel="Active sprint completion rate" />
                       <MetricCard label="Open Stories / Bugs" value={selectedProject.stories?.length || 0} trendLabel="Synchronized Jira items" />
-                      <MetricCard label="Recent Commits" value={selectedProject.repository?.commits?.length || 0} trendLabel="Code additions tracked" />
+                      <MetricCard label="Recent Commits" value={allProjectCommits.length} trendLabel="Code additions tracked" />
                       <MetricCard label="Project Risk Score" value={`${selectedProject.metrics?.riskScore || 8.5}/100`} trendLabel="Low architectural risk" />
                     </div>
 
@@ -427,7 +552,7 @@ export default function DashboardOverview() {
                           </button>
                         </div>
                         <div className="space-y-2 text-xs">
-                          {selectedProject.repository?.commits?.slice(0, 4).map((commit: any) => (
+                          {allProjectCommits.slice(0, 4).map((commit: any) => (
                             <div key={commit.id} className="flex justify-between rounded-lg border border-border bg-secondary/50 p-2.5">
                               <span className="truncate pr-2 font-mono text-primary">
                                 {commit.sha.slice(0, 7)} - {commit.message.slice(0, 40)}
@@ -435,7 +560,7 @@ export default function DashboardOverview() {
                               <span className="shrink-0 text-muted-foreground">{new Date(commit.committedAt).toLocaleDateString()}</span>
                             </div>
                           ))}
-                          {(!selectedProject.repository?.commits || selectedProject.repository.commits.length === 0) && (
+                          {allProjectCommits.length === 0 && (
                             <p className="py-2 text-center text-muted-foreground">No commits synced yet.</p>
                           )}
                         </div>
@@ -445,34 +570,39 @@ export default function DashboardOverview() {
                 )}
 
                 {activeTab === "repository" && (
-                  <Tabs value={repoSubTab} onValueChange={(v) => setRepoSubTab(v as any)} className="space-y-6">
-                    <PillTabsList>
-                      {(["overview", "commits", "pulls", "branches", "webhooks", "history"] as const).map((sub) => (
-                        <PillTabsTrigger key={sub} value={sub}>
-                          {sub}
-                        </PillTabsTrigger>
-                      ))}
-                    </PillTabsList>
+                  <div>
+                    {repoSwitcher}
+                    <Tabs value={repoSubTab} onValueChange={(v) => setRepoSubTab(v as any)} className="space-y-6">
+                      <PillTabsList>
+                        {(["overview", "commits", "pulls", "branches", "webhooks", "history"] as const).map((sub) => (
+                          <PillTabsTrigger key={sub} value={sub}>
+                            {sub}
+                          </PillTabsTrigger>
+                        ))}
+                      </PillTabsList>
 
-                    <TabsContent value="overview">
-                      {metricsData && <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedProject.repositoryId} />}
-                    </TabsContent>
-                    <TabsContent value="commits">
-                      {selectedProject.repositoryId && <CommitList repositoryId={selectedProject.repositoryId} />}
-                    </TabsContent>
-                    <TabsContent value="pulls">
-                      {selectedProject.repositoryId && <PullRequestList repositoryId={selectedProject.repositoryId} />}
-                    </TabsContent>
-                    <TabsContent value="branches">
-                      {selectedProject.repositoryId && <BranchList repositoryId={selectedProject.repositoryId} />}
-                    </TabsContent>
-                    <TabsContent value="webhooks">
-                      {selectedProject.repositoryId && <WebhookEventLog repositoryId={selectedProject.repositoryId} />}
-                    </TabsContent>
-                    <TabsContent value="history">
-                      {selectedProject.repositoryId && <SyncHistory />}
-                    </TabsContent>
-                  </Tabs>
+                      <TabsContent value="overview">
+                        {metricsData && selectedRepoId && (
+                          <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedRepoId} />
+                        )}
+                      </TabsContent>
+                      <TabsContent value="commits">
+                        {selectedRepoId && <CommitList repositoryId={selectedRepoId} />}
+                      </TabsContent>
+                      <TabsContent value="pulls">
+                        {selectedRepoId && <PullRequestList repositoryId={selectedRepoId} />}
+                      </TabsContent>
+                      <TabsContent value="branches">
+                        {selectedRepoId && <BranchList repositoryId={selectedRepoId} />}
+                      </TabsContent>
+                      <TabsContent value="webhooks">
+                        {selectedRepoId && <WebhookEventLog repositoryId={selectedRepoId} />}
+                      </TabsContent>
+                      <TabsContent value="history">
+                        {selectedRepoId && <SyncHistory />}
+                      </TabsContent>
+                    </Tabs>
+                  </div>
                 )}
 
                 {activeTab === "jira" && (
@@ -483,7 +613,9 @@ export default function DashboardOverview() {
 
                 {activeTab === "analytics" && (
                   <div className="space-y-6">
-                    {metricsData && <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedProject.repositoryId} />}
+                    {metricsData && selectedRepoId && (
+                      <MetricCharts data={metricsData} loading={false} onRefresh={() => {}} repositoryId={selectedRepoId} />
+                    )}
                     <Card className="space-y-4 p-6">
                       <h3 className="text-sm font-bold text-foreground">DORA Metrics & Velocity</h3>
                       <div className="grid grid-cols-1 gap-4 text-center text-xs sm:grid-cols-4">
@@ -511,13 +643,22 @@ export default function DashboardOverview() {
                 {activeTab === "modules" && <KnowledgeView projectId={selectedProject.id} />}
                 {activeTab === "ai_insights" && <AIInsightsView projectId={selectedProject.id} />}
                 {activeTab === "integrations" && <IntegrationsView projectId={selectedProject.id} />}
-                {activeTab === "settings" && selectedProject.repositoryId && (
-                  <RepoSettings
-                    repositoryId={selectedProject.repositoryId}
-                    onRefreshRepos={fetchProjects}
-                    onSelectTab={() => {}}
-                    onDeleteRepo={fetchProjects}
-                  />
+                {activeTab === "settings" && selectedRepoId && (
+                  <div>
+                    {repoSwitcher}
+                    <RepoSettings
+                      repositoryId={selectedRepoId}
+                      onRefreshRepos={() => {
+                        fetchProjects();
+                        fetchProjectDetails(selectedProject.id);
+                      }}
+                      onSelectTab={() => {}}
+                      onDeleteRepo={() => {
+                        fetchProjects();
+                        fetchProjectDetails(selectedProject.id);
+                      }}
+                    />
+                  </div>
                 )}
               </>
             )}

@@ -28,11 +28,15 @@ export async function correlateProject(projectId: string) {
   const project = await db.engineeringProject.findUnique({
     where: { id: projectId },
     include: {
-      repository: {
+      repositories: {
         include: {
-          commits: true,
-          pullRequests: true,
-          branches: true,
+          repository: {
+            include: {
+              commits: true,
+              pullRequests: true,
+              branches: true,
+            },
+          },
         },
       },
       stories: true,
@@ -40,9 +44,13 @@ export async function correlateProject(projectId: string) {
     },
   });
 
-  if (!project || !project.repository) {
+  if (!project || project.repositories.length === 0) {
     return { correlatedCommits: 0, correlatedPullRequests: 0 };
   }
+
+  const repoCommits = project.repositories.flatMap((pr) => pr.repository.commits);
+  const repoBranches = project.repositories.flatMap((pr) => pr.repository.branches);
+  const repoPullRequests = project.repositories.flatMap((pr) => pr.repository.pullRequests);
 
   const storiesByKey = new Map<string, string>();
   for (const story of project.stories) {
@@ -53,7 +61,7 @@ export async function correlateProject(projectId: string) {
   let correlatedPRsCount = 0;
 
   // 1. Correlate Commits
-  for (const commit of project.repository.commits) {
+  for (const commit of repoCommits) {
     const keys = extractJiraIssueKeys(commit.message);
     for (const key of keys) {
       const storyId = storiesByKey.get(key);
@@ -81,13 +89,13 @@ export async function correlateProject(projectId: string) {
   }
 
   // 2. Correlate Branches (matches branch names to commits/PRs)
-  for (const branch of project.repository.branches) {
+  for (const branch of repoBranches) {
     const keys = extractJiraIssueKeys(branch.name);
     for (const key of keys) {
       const storyId = storiesByKey.get(key);
       if (storyId) {
         // Find latest commit on this branch or correlate branch commits
-        const branchCommit = project.repository.commits.find((c) => c.sha === branch.sha);
+        const branchCommit = repoCommits.find((c) => c.sha === branch.sha);
         if (branchCommit) {
           await db.storyCommit.upsert({
             where: { storyId_commitId: { storyId, commitId: branchCommit.id } },
@@ -109,7 +117,7 @@ export async function correlateProject(projectId: string) {
   }
 
   // 3. Correlate Pull Requests (title & description)
-  for (const pr of project.repository.pullRequests) {
+  for (const pr of repoPullRequests) {
     const titleKeys = extractJiraIssueKeys(pr.title);
     const descKeys = extractJiraIssueKeys(pr.title + " " + (pr.title || "")); // Check title and desc
 

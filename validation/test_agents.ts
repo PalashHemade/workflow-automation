@@ -45,7 +45,9 @@ async function runValidation() {
         name: "Test Agent Project",
         description: "Integration test project for AI Agent framework",
         ownerId: user.id,
-        repositoryId: repo.id,
+        repositories: {
+          create: { repositoryId: repo.id, isPrimary: true },
+        },
       },
     });
   }

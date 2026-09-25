@@ -1,10 +1,10 @@
-import { ProjectRepository } from "../repositories/ProjectRepository";
+import { EngineeringProjectRepository } from "../repositories/EngineeringProjectRepository";
 import { InsightRepository, CreateInsightData } from "../repositories/InsightRepository";
 import { EventRepository, LogEventData } from "../repositories/EventRepository";
 import { AIInsight, ProjectKnowledge, ProjectEvent } from "@prisma/client";
 
 export class MemoryManager {
-  private projectRepo = new ProjectRepository();
+  private projectRepo = new EngineeringProjectRepository();
   private insightRepo = new InsightRepository();
   private eventRepo = new EventRepository();
 

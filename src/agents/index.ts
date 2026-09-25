@@ -21,7 +21,7 @@ export * from "./tools/SearchTimelineTool";
 export * from "./tools/CreateInsightTool";
 export * from "./tools/UpdateKnowledgeTool";
 
-export * from "./repositories/ProjectRepository";
+export * from "./repositories/EngineeringProjectRepository";
 export * from "./repositories/CodeRepository";
 export * from "./repositories/MetricsRepository";
 export * from "./repositories/InsightRepository";

@@ -13,10 +13,14 @@ export async function calculateProjectMetrics(projectId: string) {
       },
       tasks: true,
       sprints: true,
-      repository: {
+      repositories: {
         include: {
-          commits: true,
-          pullRequests: true,
+          repository: {
+            include: {
+              commits: true,
+              pullRequests: true,
+            },
+          },
         },
       },
       pipelineRuns: true,
@@ -33,7 +37,8 @@ export async function calculateProjectMetrics(projectId: string) {
   const openBugs = project.tasks.filter((t) => t.issueType.toLowerCase().includes("bug") && t.status.toLowerCase() !== "done").length;
 
   const storiesWithoutCommits = project.stories.filter((s) => s.storyCommits.length === 0).length;
-  const prsWaitingReview = project.repository.pullRequests.filter((pr) => pr.state === "open").length;
+  const allPullRequests = project.repositories.flatMap((pr) => pr.repository.pullRequests);
+  const prsWaitingReview = allPullRequests.filter((pr) => pr.state === "open").length;
 
   const sprintVelocity = totalStories > 0 ? (completedStories / totalStories) * 100 : 0;
   const bugRate = totalStories > 0 ? (totalBugs / totalStories) * 10 : 0;
@@ -92,13 +97,17 @@ export async function getAIQueryData(projectId: string) {
         },
       },
       tasks: true,
-      repository: {
+      repositories: {
         include: {
-          pullRequests: {
-            where: { state: "open" },
-          },
-          commits: {
-            include: { files: true },
+          repository: {
+            include: {
+              pullRequests: {
+                where: { state: "open" },
+              },
+              commits: {
+                include: { files: true },
+              },
+            },
           },
         },
       },
@@ -130,7 +139,7 @@ export async function getAIQueryData(projectId: string) {
     .map(([commitId, keys]) => ({ commitId, keys }));
 
   // 3. PRs waiting review
-  const prsWaitingReview = project.repository.pullRequests.map((pr) => ({
+  const prsWaitingReview = project.repositories.flatMap((pr) => pr.repository.pullRequests).map((pr) => ({
     id: pr.id,
     number: pr.number,
     title: pr.title,

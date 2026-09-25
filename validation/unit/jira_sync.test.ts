@@ -37,7 +37,9 @@ export async function runJiraSyncUnitTests(): Promise<TestResult[]> {
       data: {
         name: "Test Jira Project",
         ownerId: TEST_USER_ID,
-        repositoryId: repo.id,
+        repositories: {
+          create: { repositoryId: repo.id, isPrimary: true },
+        },
       },
     });
 

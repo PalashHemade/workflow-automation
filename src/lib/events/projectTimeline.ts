@@ -15,17 +15,19 @@ export async function getUnifiedTimeline(options: TimelineQueryOptions) {
 
   const project = await db.engineeringProject.findUnique({
     where: { id: projectId },
-    select: { repositoryId: true },
+    select: { repositories: { select: { repositoryId: true } } },
   });
 
   if (!project) {
     throw new Error(`EngineeringProject ${projectId} not found`);
   }
 
+  const repositoryIds = project.repositories.map((r) => r.repositoryId);
+
   const whereClause: any = {
     OR: [
       { engineeringProjectId: projectId },
-      { repositoryId: project.repositoryId },
+      { repositoryId: { in: repositoryIds } },
     ],
   };
 

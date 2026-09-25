@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const project = await db.engineeringProject.findUnique({
       where: { id: params.id },
-      include: { integrations: true },
+      include: { integrations: true, repositories: true },
     });
 
     if (!project) {
@@ -29,9 +29,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       data: { syncStatus: "SYNCING" },
     });
 
-    // 1. Sync GitHub repository
-    if (project.repositoryId) {
-      await runIncrementalSync(project.repositoryId, "manual");
+    // 1. Sync every GitHub repository linked to this project (sequential, to
+    // avoid bursting GitHub's rate limit — matches scheduler.ts's pattern).
+    for (const link of project.repositories) {
+      await runIncrementalSync(link.repositoryId, "manual");
     }
 
     // 2. Sync Jira if integrated
