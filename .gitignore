@@ -71,4 +71,6 @@ deploy.env
 # ── Environment Files & Local Machine Inventories ────────────
 .env
 ansible/inventory.ini
+devops/kubernetes-ansible/ansible/ssh/
+devops/kubernetes-ansible/ansible/inventory.ini
 
